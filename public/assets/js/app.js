@@ -59,6 +59,7 @@ function toast(msg,type='success'){
   const wrap=document.getElementById('toastWrap');
   if(!wrap)return;
   const el=document.createElement('div');
+  el.className='toast-item';
   const bg=type==='success'?'#1e8449':type==='warn'?'#b7791f':'#c0392b';
   el.style.cssText=`background:${bg};color:#fff;padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;box-shadow:0 4px 15px rgba(0,0,0,.25);pointer-events:auto;max-width:320px;display:flex;align-items:center;gap:9px;`;
   const icon=document.createElement('i');
