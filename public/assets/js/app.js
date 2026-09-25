@@ -325,18 +325,69 @@ async function deleteEmployee(id){
 /* ═══════════════════════════════════════════════════
    VOUCHERS
 ═══════════════════════════════════════════════════ */
+let vf={q:'',type:'All',head:'All',from:'',to:''};
+
+function filteredVouchers(){
+  const q=vf.q.toLowerCase();
+  return db.vouchers.filter(v=>{
+    if(vf.type!=='All'&&v.type!==vf.type)return false;
+    if(vf.head!=='All'&&v.headId!==vf.head)return false;
+    if(vf.from&&v.date<vf.from)return false;
+    if(vf.to&&v.date>vf.to)return false;
+    if(q){
+      const h=db.heads.find(x=>x.id===v.headId);
+      if(!`${v.no} ${v.party||''} ${v.description||''} ${h?.name||''} ${v.createdBy||''}`.toLowerCase().includes(q))return false;
+    }
+    return true;
+  }).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+}
+
+function voucherRowHtml(v){
+  const h=db.heads.find(x=>x.id===v.headId)||{name:'—'};
+  const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
+  return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${h.name}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td><strong>${money(v.amount)}</strong></td><td style="color:#888;font-size:12px">${v.createdBy}</td>
+  <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+}
+
+function vouchCountText(rows){
+  const pay=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
+  const rec=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
+  return `Showing ${rows.length} of ${db.vouchers.length} vouchers — Payments ${money(pay)} • Receipts ${money(rec)}`;
+}
+
+function applyVoucherFilters(){
+  vf={q:document.getElementById('vfQ').value.trim(),type:document.getElementById('vfType').value,
+      head:document.getElementById('vfHead').value,from:document.getElementById('vfFrom').value,to:document.getElementById('vfTo').value};
+  const rows=filteredVouchers();
+  document.getElementById('vouchBody').innerHTML=rows.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>';
+  document.getElementById('vouchCount').textContent=vouchCountText(rows);
+}
+
+function clearVoucherFilters(){
+  vf={q:'',type:'All',head:'All',from:'',to:''};
+  render();
+}
+
 function renderVouchersPage(){
-  const sorted=[...db.vouchers].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const rows=filteredVouchers();
+  const headOpts=db.heads.map(h=>`<option value="${h.id}" ${vf.head===h.id?'selected':''}>${h.name}</option>`).join('');
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-receipt"></i> Vouchers</h2><button class="btn-primary" onclick="voucherForm()"><i class="fa-solid fa-plus"></i> New Voucher</button></div>
+    <div class="page-title-bar" style="padding:14px 18px">
+      <div class="row-inline" style="width:100%;align-items:flex-end">
+        <div style="flex:2.2;min-width:170px"><label>Search</label><input id="vfQ" placeholder="No., party, description…" value="${vf.q.replace(/"/g,'&quot;')}" oninput="applyVoucherFilters()"></div>
+        <div style="min-width:110px"><label>Type</label><select id="vfType" onchange="applyVoucherFilters()">
+          <option ${vf.type==='All'?'selected':''}>All</option><option ${vf.type==='Payment'?'selected':''}>Payment</option><option ${vf.type==='Receipt'?'selected':''}>Receipt</option></select></div>
+        <div style="min-width:140px"><label>Head</label><select id="vfHead" onchange="applyVoucherFilters()"><option value="All">All Heads</option>${headOpts}</select></div>
+        <div style="min-width:130px"><label>From</label><input type="date" id="vfFrom" value="${vf.from}" onchange="applyVoucherFilters()"></div>
+        <div style="min-width:130px"><label>To</label><input type="date" id="vfTo" value="${vf.to}" onchange="applyVoucherFilters()"></div>
+        <div style="flex:0;min-width:auto"><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
+      </div>
+    </div>
+    <div id="vouchCount" style="font-size:12px;color:#8896a6;margin:0 0 10px 4px">${vouchCountText(rows)}</div>
     <table class="list-table">
       <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th>Amount</th><th>By</th><th>Actions</th></tr></thead>
-      <tbody>${sorted.map(v=>{
-        const h=db.heads.find(x=>x.id===v.headId)||{name:'—'};
-        const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
-        return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${h.name}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td><strong>${money(v.amount)}</strong></td><td style="color:#888;font-size:12px">${v.createdBy}</td>
-        <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
-      }).join('')||'<tr class="empty-row"><td colspan="9">No vouchers yet.</td></tr>'}</tbody>
+      <tbody id="vouchBody">${rows.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>'}</tbody>
     </table>`);
 }
 
