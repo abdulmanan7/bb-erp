@@ -3,10 +3,13 @@
 namespace App\Controllers\Api;
 
 use App\Models\SalarySlipModel;
+use App\Models\VoucherModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class Salary extends BaseApiController
 {
+    private const SALARY_HEAD = 'aaebc5788557b160';
+
     public function create(): ResponseInterface
     {
         $b = $this->body();
@@ -16,7 +19,9 @@ class Salary extends BaseApiController
         }
         $m = new SalarySlipModel();
         $id = $this->newId();
-        $m->insert($this->rowData($b) + ['id' => $id, 'created_at' => $this->now()]);
+        $row = $this->rowData($b) + ['id' => $id, 'created_at' => $this->now()];
+        $m->insert($row);
+        $this->postExpenseVoucher($row);
         return $this->json(['slip' => SalarySlipModel::map($m->find($id))]);
     }
 
@@ -63,5 +68,29 @@ class Salary extends BaseApiController
             'bonus'         => $bonus,
             'total'         => $basic + $allowance - $deduction + $bonus,
         ];
+    }
+
+    private function postExpenseVoucher(array $slip): void
+    {
+        $total = (float) ($slip['total'] ?? 0);
+        if ($total <= 0) {
+            return;
+        }
+        $date = date('Y-m-d');
+        $monthName = date('F', mktime(0, 0, 0, (int) $slip['sal_month'], 1));
+        $m = new VoucherModel();
+        $m->insert([
+            'id'          => $this->newId(),
+            'no'          => $m->nextNo('Payment', $date),
+            'type'        => 'Payment',
+            'v_date'      => $date,
+            'head_id'     => self::SALARY_HEAD,
+            'amount'      => $total,
+            'party'       => $slip['employee_name'],
+            'description' => 'Salary ' . $monthName . ' ' . $slip['sal_year'],
+            'attachment'  => '',
+            'created_by'  => $this->user()['name'] ?? 'Admin',
+            'created_at'  => $this->now(),
+        ]);
     }
 }

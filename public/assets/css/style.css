@@ -92,6 +92,13 @@ button{cursor:pointer;transition:all .18s;font-family:inherit;}
 .login-card .btn-primary{width:100%;margin-top:20px;padding:13px;}
 .item-row{display:grid;grid-template-columns:2.5fr 80px 120px 110px 36px;gap:8px;align-items:center;margin-top:8px;}
 .checklist{max-height:160px;overflow:auto;border:1.5px solid var(--border);padding:10px;border-radius:8px;margin-top:6px;background:#fafbfc;}
+.ms-wrap{position:relative;}
+.ms-btn{width:100%;padding:10px 12px;margin-top:5px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:#fff;color:#1c1c1c;display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;transition:border-color .2s,box-shadow .2s;}
+.ms-btn:hover{border-color:#cdd5de;}
+.ms-btn:focus{outline:none;border-color:var(--secondary);box-shadow:0 0 0 3px rgba(224,149,46,.18);}
+.ms-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ms-btn i{color:#8a97a6;font-size:12px;flex-shrink:0;}
+.ms-panel{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:60;max-height:220px;overflow:auto;border:1.5px solid var(--border);border-radius:8px;background:#fff;box-shadow:0 12px 32px rgba(11,46,79,.16);padding:8px 10px;animation:fadeIn .15s ease;}
 .chk{display:flex!important;align-items:center;font-weight:400!important;font-size:13.5px;margin:5px 0;text-transform:none!important;letter-spacing:0!important;}
 .row-inline{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
 .row-inline>*{flex:1;min-width:130px;}

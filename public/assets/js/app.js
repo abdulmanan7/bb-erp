@@ -701,7 +701,7 @@ function openSalaryPrint(id){
    REPORTS
 ═══════════════════════════════════════════════════ */
 function renderReportsPage(){
-  const headOptions=db.heads.map(h=>`<option value="${h.id}">${h.name} (${h.type})</option>`).join('');
+  const headChecks=db.heads.map(h=>`<label class="chk"><input type="checkbox" class="repHeadChk" value="${h.id}" checked onchange="repHeadSync()">${h.name} (${h.type})</label>`).join('');
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-chart-line"></i> Reports & Analytics</h2></div>
     <div style="background:#fff;padding:22px;border-radius:12px;margin-bottom:22px;box-shadow:var(--shadow)">
@@ -718,7 +718,17 @@ function renderReportsPage(){
         <div id="repFromWrap" style="display:none"><label>From</label><input type="date" id="repFrom"></div>
         <div id="repToWrap" style="display:none"><label>To</label><input type="date" id="repTo"></div>
         <div><label>Type</label><select id="repType"><option>All</option><option>Expense</option><option>Income</option></select></div>
-        <div><label>Head</label><select id="repHead"><option value="All">All Heads</option>${headOptions}</select></div>
+        <div style="flex:2;min-width:220px"><label>Heads</label>
+          <div class="ms-wrap">
+            <button type="button" class="ms-btn" onclick="repHeadToggle()">
+              <span id="repHeadLabel">All Heads</span><i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="ms-panel hidden" id="repHeadPanel">
+              <label class="chk"><input type="checkbox" id="repHeadAll" checked onchange="repHeadToggleAll(this);repHeadSync()">All Heads</label>
+              ${headChecks}
+            </div>
+          </div>
+        </div>
         <div style="display:flex;align-items:flex-end"><button class="btn-primary" style="width:100%" onclick="generateReport()"><i class="fa-solid fa-chart-column"></i> Generate</button></div>
       </div>
     </div>
@@ -731,6 +741,26 @@ function toggleCustomDates(){
   document.getElementById('repToWrap').style.display=show?'block':'none';
 }
 
+function repHeadToggle(){
+  document.getElementById('repHeadPanel').classList.toggle('hidden');
+}
+function repHeadToggleAll(cb){
+  document.querySelectorAll('.repHeadChk').forEach(c=>c.checked=cb.checked);
+}
+function repHeadSync(){
+  const boxes=[...document.querySelectorAll('.repHeadChk')];
+  const names=boxes.filter(c=>c.checked).map(c=>c.closest('label').textContent.trim());
+  document.getElementById('repHeadAll').checked=names.length===boxes.length;
+  const lbl=document.getElementById('repHeadLabel');
+  if(lbl)lbl.textContent=!names.length||names.length===boxes.length?'All Heads'
+    :names.length<=2?names.join(', '):`${names.length} heads selected`;
+}
+document.addEventListener('click',e=>{
+  document.querySelectorAll('.ms-panel:not(.hidden)').forEach(p=>{
+    if(!p.parentElement.contains(e.target))p.classList.add('hidden');
+  });
+});
+
 function generateReport(){
   const period=document.getElementById('repPeriod').value;
   const today=new Date();let from,to=today;
@@ -742,11 +772,12 @@ function generateReport(){
   else if(period==='year'){from=new Date(today.getFullYear(),0,1);}
   else{from=new Date(document.getElementById('repFrom').value);to=new Date(document.getElementById('repTo').value);if(!from.getTime()||!to.getTime()){toast('Select both dates.','warn');return;}}
   const fromStr=from.toISOString().slice(0,10),toStr=to.toISOString().slice(0,10);
-  const repType=document.getElementById('repType').value,repHead=document.getElementById('repHead').value;
+  const repType=document.getElementById('repType').value;
+  const repHeads=[...document.querySelectorAll('.repHeadChk:checked')].map(c=>c.value);
   let rows=db.vouchers.filter(v=>v.date>=fromStr&&v.date<=toStr);
   if(repType==='Expense')rows=rows.filter(v=>v.type==='Payment');
   if(repType==='Income')rows=rows.filter(v=>v.type==='Receipt');
-  if(repHead!=='All')rows=rows.filter(v=>v.headId===repHead);
+  if(repHeads.length&&repHeads.length<db.heads.length)rows=rows.filter(v=>repHeads.includes(v.headId));
   rows=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
   currentReportRows=rows;reportMeta={from:fromStr,to:toStr};
   const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
