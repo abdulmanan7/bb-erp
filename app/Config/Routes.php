@@ -25,6 +25,7 @@ $routes->group('api', static function (RouteCollection $routes) {
     $routes->delete('employees/(:segment)', 'Api\Employees::delete/$1', ['filter' => 'auth:admin']);
 
     // Vouchers — employees can create, admin manages all
+    $routes->get('vouchers/(:segment)/attachment', 'Api\Vouchers::attachment/$1', ['filter' => 'auth']);
     $routes->post('vouchers', 'Api\Vouchers::create', ['filter' => 'auth']);
     $routes->put('vouchers/(:segment)', 'Api\Vouchers::update/$1', ['filter' => 'auth:admin']);
     $routes->delete('vouchers/(:segment)', 'Api\Vouchers::delete/$1', ['filter' => 'auth:admin']);

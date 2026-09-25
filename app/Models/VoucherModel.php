@@ -12,7 +12,7 @@ class VoucherModel extends Model
     protected $useTimestamps = false;
     protected $allowedFields = [
         'id', 'no', 'type', 'v_date', 'head_id', 'amount',
-        'party', 'description', 'created_by', 'created_at',
+        'party', 'description', 'attachment', 'created_by', 'created_at',
     ];
 
     public static function map(array $r): array
@@ -26,6 +26,7 @@ class VoucherModel extends Model
             'amount'      => (float) $r['amount'],
             'party'       => $r['party'] ?? '',
             'description' => $r['description'] ?? '',
+            'attachment'  => $r['attachment'] ?? '',
             'createdBy'   => $r['created_by'] ?? '',
             'createdAt'   => $r['created_at'] ?? null,
         ];

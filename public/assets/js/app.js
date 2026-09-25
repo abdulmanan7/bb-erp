@@ -7,6 +7,7 @@
 /* ── API ── */
 // Tries pretty URLs first, then index.php/api/… for hosts without mod_rewrite
 const API_BASES=['api/','index.php/api/'];
+let API_BASE='api/'; // updated to whichever base works (for <img>/<a> URLs)
 async function api(path,method='GET',body,quiet=false){
   const opt={method};
   if(body!==undefined){opt.headers={'Content-Type':'application/json'};opt.body=JSON.stringify(body);}
@@ -14,6 +15,7 @@ async function api(path,method='GET',body,quiet=false){
   for(const base of API_BASES){
     try{res=await fetch(base+path,opt);}catch(e){res=null;continue;}
     if(res.status===404)continue;
+    API_BASE=base;
     break;
   }
   if(!res||res.status===404){if(!quiet)toast('Cannot reach server API. Check .htaccess/mod_rewrite.','error');return null;}
@@ -23,6 +25,7 @@ async function api(path,method='GET',body,quiet=false){
   return data;
 }
 async function loadState(){const s=await api('state');if(s)db=s;}
+function readFileData(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file);});}
 
 /* ── LOCAL STATE ── */
 function defaultSettings(){
@@ -331,7 +334,7 @@ function renderVouchersPage(){
         const h=db.heads.find(x=>x.id===v.headId)||{name:'—'};
         const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
         return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${h.name}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td><strong>${money(v.amount)}</strong></td><td style="color:#888;font-size:12px">${v.createdBy}</td>
-        <td style="white-space:nowrap"><button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+        <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
       }).join('')||'<tr class="empty-row"><td colspan="9">No vouchers yet.</td></tr>'}</tbody>
     </table>`);
 }
@@ -379,6 +382,10 @@ function voucherForm(id){
       <input id="vParty" value="${editing?.party||''}" placeholder="Person or company name">
       <label>Description / Narration</label>
       <textarea id="vDesc" placeholder="Details about this transaction">${editing?.description||''}</textarea>
+      <label>Attachment (image or PDF, max 5 MB)</label>
+      <input type="file" id="vAttach" accept="image/*,.pdf">
+      ${editing?.attachment?`<p style="font-size:13px;margin-top:6px"><i class="fa-solid fa-paperclip"></i> <a href="${API_BASE}vouchers/${id}/attachment" target="_blank">${editing.attachment}</a>
+        &nbsp;<label style="display:inline;font-weight:400;text-transform:none;letter-spacing:0;margin:0"><input type="checkbox" id="vAttachRemove" style="margin:0 4px 0 0"> Remove</label></p>`:''}
       <div class="modal-actions">
         <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save & Generate</button>
@@ -404,6 +411,12 @@ async function saveVoucher(e,id){
   if(!sel.value){toast('Select an account head.','warn');return;}
   const data={headId:sel.value,date:document.getElementById('vDate').value,amount:Number(document.getElementById('vAmount').value),
     party:document.getElementById('vParty').value.trim(),description:document.getElementById('vDesc').value.trim()};
+  const file=document.getElementById('vAttach')?.files[0];
+  if(file){
+    if(file.size>5*1024*1024){toast('Attachment too large (max 5 MB).','warn');return;}
+    data.attachment={name:file.name,data:await readFileData(file)};
+  }
+  if(document.getElementById('vAttachRemove')?.checked)data.removeAttachment=true;
   const r=await api('vouchers'+(id?'/'+id:''),id?'PUT':'POST',data);
   if(!r)return;
   await loadState();closeModal();
@@ -431,6 +444,10 @@ function openVoucherPrint(id){
       <tr><th>Description</th><td>${v.description||'—'}</td></tr>
       <tr><th>Amount</th><td style="font-size:22px;font-weight:800;color:var(--primary)">${money(v.amount)}</td></tr>
     </table>
+    ${v.attachment?(()=>{const isImg=/\.(jpe?g|png|gif|webp)$/i.test(v.attachment);const url=`${API_BASE}vouchers/${v.id}/attachment`;
+      return isImg
+        ?`<div style="margin-top:18px"><p style="font-size:12px;color:#888;margin-bottom:6px"><i class="fa-solid fa-paperclip"></i> Attachment — ${v.attachment}</p><img src="${url}" alt="attachment" style="max-width:100%;border:1px solid var(--border);border-radius:8px"></div>`
+        :`<p class="noprint" style="margin-top:14px;font-size:13px"><i class="fa-solid fa-paperclip"></i> Attachment: <a href="${url}" target="_blank">${v.attachment}</a></p>`;})():''}
     <div class="sign-row">
       <div><span>Prepared By</span>${v.createdBy}</div>
       <div><span>Checked By</span>&nbsp;</div>

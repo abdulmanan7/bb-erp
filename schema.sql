@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS `vouchers` (
   `amount` decimal(14,2) NOT NULL DEFAULT 0,
   `party` varchar(150) NOT NULL DEFAULT '',
   `description` text,
+  `attachment` varchar(255) NOT NULL DEFAULT '',
   `created_by` varchar(100) NOT NULL DEFAULT '',
   `created_at` datetime DEFAULT NULL,
   KEY `idx_vdate` (`v_date`),
