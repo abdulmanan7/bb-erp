@@ -11,7 +11,7 @@ class VoucherModel extends Model
     protected $returnType = 'array';
     protected $useTimestamps = false;
     protected $allowedFields = [
-        'id', 'no', 'type', 'v_date', 'head_id', 'amount',
+        'id', 'no', 'type', 'v_date', 'head_id', 'sub_head_id', 'amount',
         'party', 'description', 'attachment', 'created_by', 'created_at',
     ];
 
@@ -23,6 +23,7 @@ class VoucherModel extends Model
             'type'        => $r['type'],
             'date'        => $r['v_date'],
             'headId'      => $r['head_id'],
+            'subHeadId'   => $r['sub_head_id'] ?? '',
             'amount'      => (float) $r['amount'],
             'party'       => $r['party'] ?? '',
             'description' => $r['description'] ?? '',

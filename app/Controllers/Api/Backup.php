@@ -8,6 +8,7 @@ use App\Models\InvoiceItemModel;
 use App\Models\InvoiceModel;
 use App\Models\SalarySlipModel;
 use App\Models\SettingModel;
+use App\Models\SubHeadModel;
 use App\Models\UserModel;
 use App\Models\VoucherModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -15,7 +16,7 @@ use CodeIgniter\HTTP\ResponseInterface;
 class Backup extends BaseApiController
 {
     private const TABLES = [
-        'employee_heads', 'invoice_items', 'vouchers',
+        'employee_heads', 'invoice_items', 'vouchers', 'sub_heads',
         'invoices', 'salary_slips', 'users', 'employees', 'heads', 'settings',
     ];
 
@@ -30,6 +31,7 @@ class Backup extends BaseApiController
             'users'     => $users,
             'employees' => (new EmployeeModel())->allMapped(),
             'heads'     => (new HeadModel())->allMapped(),
+            'subHeads'  => (new SubHeadModel())->allMapped(),
             'vouchers'  => (new VoucherModel())->allMapped(),
             'invoices'  => (new InvoiceModel())->allMapped(),
             'salary'    => (new SalarySlipModel())->allMapped(),
@@ -50,6 +52,7 @@ class Backup extends BaseApiController
         }
         $this->importSettings($b['settings']);
         $this->importHeads((array) ($b['heads'] ?? []));
+        $this->importSubHeads((array) ($b['subHeads'] ?? []));
         $this->importEmployees((array) ($b['employees'] ?? []));
         $this->importUsers((array) ($b['users'] ?? []), $b);
         $this->importVouchers((array) ($b['vouchers'] ?? []));
@@ -171,6 +174,19 @@ class Backup extends BaseApiController
         }
     }
 
+    private function importSubHeads(array $rows): void
+    {
+        $m = new SubHeadModel();
+        foreach ($rows as $s) {
+            $m->insert([
+                'id'         => (string) ($s['id'] ?? $this->newId()),
+                'head_id'    => (string) ($s['headId'] ?? ''),
+                'name'       => (string) ($s['name'] ?? ''),
+                'created_at' => $this->now(),
+            ]);
+        }
+    }
+
     private function importEmployees(array $rows): void
     {
         $m = new EmployeeModel();
@@ -197,6 +213,7 @@ class Backup extends BaseApiController
                 'type'        => ($v['type'] ?? '') === 'Receipt' ? 'Receipt' : 'Payment',
                 'v_date'      => $this->validDate($v['date'] ?? ''),
                 'head_id'     => (string) ($v['headId'] ?? ''),
+                'sub_head_id' => (string) ($v['subHeadId'] ?? ''),
                 'amount'      => (float) ($v['amount'] ?? 0),
                 'party'       => (string) ($v['party'] ?? ''),
                 'description' => (string) ($v['description'] ?? ''),

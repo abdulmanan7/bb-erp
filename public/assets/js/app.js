@@ -218,15 +218,25 @@ function renderHeadsPage(){
       <thead><tr><th>Head Name</th><th>Type</th><th>Group</th><th>Total Activity</th><th>Actions</th></tr></thead>
       <tbody>${db.heads.map(h=>{
         const vol=db.vouchers.filter(v=>v.headId===h.id).reduce((s,v)=>s+v.amount,0);
+        const subs=(db.subHeads||[]).filter(s=>s.headId===h.id);
         const badge=h.type==='Expense'?'<span class="badge badge-expense">Expense</span>':'<span class="badge badge-income">Income</span>';
-        return `<tr><td><strong>${h.name}</strong></td><td>${badge}</td><td>${h.group?`<span class="badge badge-neutral">${h.group}</span>`:'—'}</td><td><strong>${money(vol)}</strong></td>
+        return `<tr><td><strong>${h.name}</strong>${subs.length?`<div style="margin-top:4px">${subs.map(s=>`<span class="badge badge-neutral" style="margin:1px;font-size:10px">${s.name}</span>`).join('')}</div>`:''}</td><td>${badge}</td><td>${h.group?`<span class="badge badge-neutral">${h.group}</span>`:'—'}</td><td><strong>${money(vol)}</strong></td>
         <td><button class="link-btn" onclick="headForm('${h.id}')"><i class="fa-solid fa-pen-to-square"></i> Edit</button> <button class="link-btn danger" onclick="deleteHead('${h.id}')"><i class="fa-solid fa-trash"></i> Delete</button></td></tr>`;
       }).join('')||'<tr class="empty-row"><td colspan="5">No heads yet. Add your first account head above.</td></tr>'}</tbody>
     </table>`);
 }
 
+function subHeadRow(id,name){
+  return `<div style="display:flex;gap:8px;margin-top:6px;align-items:center"><input class="subName" data-id="${id||''}" value="${name||''}" placeholder="Sub-head name" style="margin-top:0"><button type="button" class="link-btn danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`;
+}
+function addSubHeadRow(){
+  document.getElementById('subList').insertAdjacentHTML('beforeend',subHeadRow('',''));
+  document.querySelector('#subList .subName:last-of-type')?.focus();
+}
+
 function headForm(id){
   const h=id?db.heads.find(x=>x.id===id):{name:'',type:'Expense',group:''};
+  const subs=id?(db.subHeads||[]).filter(s=>s.headId===id):[];
   showModal(`<div class="modal-header"><h3>${id?'Edit':'Add'} Account Head</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
     <p style="font-size:13px;color:#888;margin-bottom:4px">e.g. "Project Alpha", "Office Rent", "Client Payments"</p>
     <form onsubmit="saveHead(event,'${id||''}')">
@@ -238,6 +248,9 @@ function headForm(id){
       </select>
       <label>Group / Category</label>
       <input id="fGroup" value="${h.group||''}" placeholder="e.g. Projects, Admin, HR">
+      <label>Sub-Heads <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — e.g. Kitchen, Stationery)</span></label>
+      <div id="subList">${subs.map(s=>subHeadRow(s.id,s.name)).join('')}</div>
+      <button type="button" class="btn-secondary" style="margin-top:8px;padding:7px 14px;font-size:12.5px" onclick="addSubHeadRow()"><i class="fa-solid fa-plus"></i> Add Sub-Head</button>
       <div class="modal-actions">
         <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Head</button>
@@ -247,7 +260,8 @@ function headForm(id){
 
 async function saveHead(e,id){
   e.preventDefault();
-  const data={name:document.getElementById('fName').value.trim(),type:document.getElementById('fType').value,group:document.getElementById('fGroup').value.trim()};
+  const data={name:document.getElementById('fName').value.trim(),type:document.getElementById('fType').value,group:document.getElementById('fGroup').value.trim(),
+    subHeads:[...document.querySelectorAll('#subList .subName')].map(i=>({id:i.dataset.id||undefined,name:i.value.trim()})).filter(s=>s.name)};
   if(!data.name){toast('Head name required.','error');return;}
   if(!await api('heads'+(id?'/'+id:''),id?'PUT':'POST',data))return;
   await loadState();closeModal();render();toast('Head saved.');
@@ -325,27 +339,34 @@ async function deleteEmployee(id){
 /* ═══════════════════════════════════════════════════
    VOUCHERS
 ═══════════════════════════════════════════════════ */
-let vf={q:'',type:'All',head:'All',from:'',to:''};
+let vf={q:'',type:'All',head:'All',sub:'All',from:'',to:'',page:1,perPage:20};
 
 function filteredVouchers(){
   const q=vf.q.toLowerCase();
   return db.vouchers.filter(v=>{
     if(vf.type!=='All'&&v.type!==vf.type)return false;
     if(vf.head!=='All'&&v.headId!==vf.head)return false;
+    if(vf.sub!=='All'&&v.subHeadId!==vf.sub)return false;
     if(vf.from&&v.date<vf.from)return false;
     if(vf.to&&v.date>vf.to)return false;
     if(q){
       const h=db.heads.find(x=>x.id===v.headId);
-      if(!`${v.no} ${v.party||''} ${v.description||''} ${h?.name||''} ${v.createdBy||''}`.toLowerCase().includes(q))return false;
+      const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);
+      if(!`${v.no} ${v.party||''} ${v.description||''} ${h?.name||''} ${sub?.name||''} ${v.createdBy||''}`.toLowerCase().includes(q))return false;
     }
     return true;
   }).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 }
 
-function voucherRowHtml(v){
+function headLabel(v){
   const h=db.heads.find(x=>x.id===v.headId)||{name:'—'};
+  const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);
+  return h.name+(sub?` <span style="color:#8896a6;font-size:11.5px">→ ${sub.name}</span>`:'');
+}
+
+function voucherRowHtml(v){
   const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
-  return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${h.name}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td><strong>${money(v.amount)}</strong></td><td style="color:#888;font-size:12px">${v.createdBy}</td>
+  return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${headLabel(v)}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td style="white-space:nowrap"><strong>${money(v.amount)}</strong></td><td style="color:#888;font-size:12px">${v.createdBy}</td>
   <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
 }
 
@@ -355,21 +376,65 @@ function vouchCountText(rows){
   return `Showing ${rows.length} of ${db.vouchers.length} vouchers — Payments ${money(pay)} • Receipts ${money(rec)}`;
 }
 
-function applyVoucherFilters(){
-  vf={q:document.getElementById('vfQ').value.trim(),type:document.getElementById('vfType').value,
-      head:document.getElementById('vfHead').value,from:document.getElementById('vfFrom').value,to:document.getElementById('vfTo').value};
+function vfSubOptions(){
+  const subs=(db.subHeads||[]).filter(s=>vf.head==='All'||s.headId===vf.head);
+  return `<option value="All">All Sub-Heads</option>`+subs.map(s=>{
+    const h=vf.head==='All'?(db.heads.find(x=>x.id===s.headId)||{}).name:null;
+    return `<option value="${s.id}" ${vf.sub===s.id?'selected':''}>${s.name}${h?' — '+h:''}</option>`;
+  }).join('');
+}
+
+function vouchPageSlice(rows){
+  const per=vf.perPage==='all'?Math.max(rows.length,1):vf.perPage;
+  const pages=Math.max(1,Math.ceil(rows.length/per));
+  if(vf.page>pages)vf.page=pages;
+  return {slice:rows.slice((vf.page-1)*per,vf.page*per),pages};
+}
+
+function vouchPagerHtml(total,pages){
+  const nums=[];
+  const windowSet=[...new Set([1,pages,vf.page-1,vf.page,vf.page+1])].filter(n=>n>=1&&n<=pages).sort((a,b)=>a-b);
+  let prev=0;
+  for(const n of windowSet){
+    if(n-prev>1)nums.push('<span class="pg-gap">…</span>');
+    nums.push(`<button class="pg-btn${n===vf.page?' active':''}" onclick="vfPage(${n})">${n}</button>`);
+    prev=n;
+  }
+  return `<button class="pg-btn" ${vf.page<=1?'disabled':''} onclick="vfPage(${vf.page-1})"><i class="fa-solid fa-chevron-left"></i></button>${nums.join('')}<button class="pg-btn" ${vf.page>=pages?'disabled':''} onclick="vfPage(${vf.page+1})"><i class="fa-solid fa-chevron-right"></i></button><span class="pg-info">Page ${vf.page} of ${pages} • ${total} voucher${total===1?'':'s'}</span>`;
+}
+
+function renderVouchTable(){
   const rows=filteredVouchers();
-  document.getElementById('vouchBody').innerHTML=rows.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>';
+  const {slice,pages}=vouchPageSlice(rows);
+  document.getElementById('vouchBody').innerHTML=slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>';
   document.getElementById('vouchCount').textContent=vouchCountText(rows);
+  document.getElementById('vouchPager').innerHTML=vouchPagerHtml(rows.length,pages);
+}
+
+function vfPage(n){vf.page=n;renderVouchTable();}
+function vfSetPer(v){vf.perPage=v==='all'?'all':parseInt(v);vf.page=1;renderVouchTable();}
+
+function applyVoucherFilters(){
+  const subSel=document.getElementById('vfSub');
+  vf={q:document.getElementById('vfQ').value.trim(),type:document.getElementById('vfType').value,
+      head:document.getElementById('vfHead').value,sub:subSel.value||'All',
+      from:document.getElementById('vfFrom').value,to:document.getElementById('vfTo').value,
+      page:1,perPage:vf.perPage};
+  subSel.innerHTML=vfSubOptions();
+  if(!subSel.value)subSel.value='All';
+  vf.sub=subSel.value;
+  renderVouchTable();
 }
 
 function clearVoucherFilters(){
-  vf={q:'',type:'All',head:'All',from:'',to:''};
+  vf={q:'',type:'All',head:'All',sub:'All',from:'',to:'',page:1,perPage:20};
   render();
 }
 
 function renderVouchersPage(){
   const rows=filteredVouchers();
+  const {slice,pages}=vouchPageSlice(rows);
+  const perOpts=[10,20,50,100].map(n=>`<option value="${n}" ${vf.perPage===n?'selected':''}>${n}</option>`).join('')+`<option value="all" ${vf.perPage==='all'?'selected':''}>All</option>`;
   const headOpts=db.heads.map(h=>`<option value="${h.id}" ${vf.head===h.id?'selected':''}>${h.name}</option>`).join('');
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-receipt"></i> Vouchers</h2><button class="btn-primary" onclick="voucherForm()"><i class="fa-solid fa-plus"></i> New Voucher</button></div>
@@ -379,16 +444,22 @@ function renderVouchersPage(){
         <div style="min-width:110px"><label>Type</label><select id="vfType" onchange="applyVoucherFilters()">
           <option ${vf.type==='All'?'selected':''}>All</option><option ${vf.type==='Payment'?'selected':''}>Payment</option><option ${vf.type==='Receipt'?'selected':''}>Receipt</option></select></div>
         <div style="min-width:140px"><label>Head</label><select id="vfHead" onchange="applyVoucherFilters()"><option value="All">All Heads</option>${headOpts}</select></div>
+        <div style="min-width:150px"><label>Sub-Head</label><select id="vfSub" onchange="applyVoucherFilters()">${vfSubOptions()}</select></div>
         <div style="min-width:130px"><label>From</label><input type="date" id="vfFrom" value="${vf.from}" onchange="applyVoucherFilters()"></div>
         <div style="min-width:130px"><label>To</label><input type="date" id="vfTo" value="${vf.to}" onchange="applyVoucherFilters()"></div>
         <div style="flex:0;min-width:auto"><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
       </div>
     </div>
-    <div id="vouchCount" style="font-size:12px;color:#8896a6;margin:0 0 10px 4px">${vouchCountText(rows)}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px 4px">
+      <div id="vouchCount" style="font-size:12px;color:#8896a6">${vouchCountText(rows)}</div>
+      <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#5b6b7d;text-transform:none;letter-spacing:0">Show
+        <select id="vfPer" style="width:auto;margin-top:0;padding:5px 8px;font-size:12.5px" onchange="vfSetPer(this.value)">${perOpts}</select> per page</label>
+    </div>
     <table class="list-table">
       <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th>Amount</th><th>By</th><th>Actions</th></tr></thead>
-      <tbody id="vouchBody">${rows.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>'}</tbody>
-    </table>`);
+      <tbody id="vouchBody">${slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>'}</tbody>
+    </table>
+    <div class="pager" id="vouchPager">${vouchPagerHtml(rows.length,pages)}</div>`);
 }
 
 function renderAddPage(){
@@ -410,8 +481,7 @@ function renderMinePage(){
     <table class="list-table">
       <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Amount</th><th></th></tr></thead>
       <tbody>${rows.map(v=>{
-        const h=db.heads.find(x=>x.id===v.headId)||{name:'—'};
-        return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${h.name}</td><td>${v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>'}</td><td><strong>${money(v.amount)}</strong></td><td><button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> View</button></td></tr>`;
+        return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${headLabel(v)}</td><td>${v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>'}</td><td><strong>${money(v.amount)}</strong></td><td><button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> View</button></td></tr>`;
       }).join('')||'<tr class="empty-row"><td colspan="6">No entries yet.</td></tr>'}
       ${rows.length?`<tr style="background:#f7f9fc"><td colspan="4" style="text-align:right;font-weight:700;padding:12px 14px">Total</td><td style="font-weight:800;padding:12px 14px">${money(total)}</td><td></td></tr>`:''}</tbody>
     </table>`);
@@ -424,7 +494,8 @@ function voucherForm(id){
   const options=allowedHeads.map(h=>`<option value="${h.id}" data-type="${h.type}" ${editing&&editing.headId===h.id?'selected':''}>${h.name} — ${h.type}${h.group?' ('+h.group+')':''}</option>`).join('');
   showModal(`<div class="modal-header"><h3>${id?'Edit':'New'} Voucher / Entry</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
     <form onsubmit="saveVoucher(event,'${id||''}')">
-      <label>Account Head *</label><select id="vHead" required onchange="vTypeLabel()">${options}</select>
+      <label>Account Head *</label><select id="vHead" required onchange="vTypeLabel();vSubSync()">${options}</select>
+      <div id="vSubWrap" style="display:none"><label>Sub-Head *</label><select id="vSubHead"></select></div>
       <div id="vTypeShow" style="margin-top:8px;padding:9px 13px;border-radius:7px;font-size:13px;font-weight:600;display:none"></div>
       <div class="row-inline">
         <div><label>Date *</label><input type="date" id="vDate" value="${editing?.date||new Date().toISOString().slice(0,10)}" required></div>
@@ -444,6 +515,16 @@ function voucherForm(id){
       </div>
     </form>`);
   vTypeLabel();
+  vSubSync(editing?.subHeadId||'');
+}
+
+function vSubSync(pre=''){
+  const headId=document.getElementById('vHead').value;
+  const subs=(db.subHeads||[]).filter(s=>s.headId===headId);
+  const wrap=document.getElementById('vSubWrap'),sel=document.getElementById('vSubHead');
+  wrap.style.display=subs.length?'block':'none';
+  sel.required=!!subs.length;
+  sel.innerHTML=subs.length?`<option value="">— Select sub-head —</option>`+subs.map(s=>`<option value="${s.id}" ${s.id===pre?'selected':''}>${s.name}</option>`).join(''):'';
 }
 
 function vTypeLabel(){
@@ -461,7 +542,10 @@ async function saveVoucher(e,id){
   e.preventDefault();
   const sel=document.getElementById('vHead');
   if(!sel.value){toast('Select an account head.','warn');return;}
-  const data={headId:sel.value,date:document.getElementById('vDate').value,amount:Number(document.getElementById('vAmount').value),
+  const subWrap=document.getElementById('vSubWrap');
+  const subHeadId=subWrap&&subWrap.style.display!=='none'?document.getElementById('vSubHead').value:'';
+  if(subWrap&&subWrap.style.display!=='none'&&!subHeadId){toast('Select a sub-head.','warn');return;}
+  const data={headId:sel.value,subHeadId,date:document.getElementById('vDate').value,amount:Number(document.getElementById('vAmount').value),
     party:document.getElementById('vParty').value.trim(),description:document.getElementById('vDesc').value.trim()};
   const file=document.getElementById('vAttach')?.files[0];
   if(file){
@@ -491,7 +575,7 @@ function openVoucherPrint(id){
     <h2 style="text-align:center;margin:18px 0;color:var(--primary);text-decoration:underline">${v.type.toUpperCase()} VOUCHER</h2>
     <table class="doc-table" style="margin-bottom:12px"><tr><td style="width:50%"><b>Voucher No.:</b> <strong style="font-size:16px">${v.no}</strong></td><td><b>Date:</b> ${dateStr(v.date)}</td></tr></table>
     <table class="doc-table">
-      <tr><th style="width:35%">Account Head</th><td>${h.name}${h.type?' ('+h.type+')':''}</td></tr>
+      <tr><th style="width:35%">Account Head</th><td>${h.name}${h.type?' ('+h.type+')':''}${(()=>{const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);return sub?` → <strong>${sub.name}</strong>`:'';})()}</td></tr>
       <tr><th>${v.type==='Payment'?'Paid To':'Received From'}</th><td>${v.party||'—'}</td></tr>
       <tr><th>Description</th><td>${v.description||'—'}</td></tr>
       <tr><th>Amount</th><td style="font-size:22px;font-weight:800;color:var(--primary)">${money(v.amount)}</td></tr>
@@ -753,6 +837,7 @@ function openSalaryPrint(id){
 ═══════════════════════════════════════════════════ */
 function renderReportsPage(){
   const headChecks=db.heads.map(h=>`<label class="chk"><input type="checkbox" class="repHeadChk" value="${h.id}" checked onchange="repHeadSync()">${h.name} (${h.type})</label>`).join('');
+  const subChecks=(db.subHeads||[]).map(s=>`<label class="chk"><input type="checkbox" class="repSubChk" value="${s.id}" checked onchange="repSubSync()">${s.name}</label>`).join('');
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-chart-line"></i> Reports & Analytics</h2></div>
     <div style="background:#fff;padding:22px;border-radius:12px;margin-bottom:22px;box-shadow:var(--shadow)">
@@ -777,6 +862,17 @@ function renderReportsPage(){
             <div class="ms-panel hidden" id="repHeadPanel">
               <label class="chk"><input type="checkbox" id="repHeadAll" checked onchange="repHeadToggleAll(this);repHeadSync()">All Heads</label>
               ${headChecks}
+            </div>
+          </div>
+        </div>
+        <div style="flex:2;min-width:220px"><label>Sub-Heads</label>
+          <div class="ms-wrap">
+            <button type="button" class="ms-btn" onclick="repSubToggle()">
+              <span id="repSubLabel">All Sub-Heads</span><i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="ms-panel hidden" id="repSubPanel">
+              <label class="chk"><input type="checkbox" id="repSubAll" checked onchange="repSubToggleAll(this);repSubSync()">All Sub-Heads</label>
+              ${subChecks||'<p style="font-size:12px;color:#8896a6;margin:4px 0">No sub-heads defined.</p>'}
             </div>
           </div>
         </div>
@@ -805,6 +901,33 @@ function repHeadSync(){
   const lbl=document.getElementById('repHeadLabel');
   if(lbl)lbl.textContent=!names.length||names.length===boxes.length?'All Heads'
     :names.length<=2?names.join(', '):`${names.length} heads selected`;
+  repSubRebuild();
+}
+function repSubToggle(){
+  document.getElementById('repSubPanel').classList.toggle('hidden');
+}
+function repSubToggleAll(cb){
+  document.querySelectorAll('.repSubChk').forEach(c=>c.checked=cb.checked);
+}
+function repSubSync(){
+  const boxes=[...document.querySelectorAll('.repSubChk')];
+  const names=boxes.filter(c=>c.checked).map(c=>c.closest('label').textContent.trim());
+  document.getElementById('repSubAll').checked=names.length===boxes.length;
+  const lbl=document.getElementById('repSubLabel');
+  if(lbl)lbl.textContent=!boxes.length||!names.length||names.length===boxes.length?'All Sub-Heads'
+    :names.length<=2?names.join(', '):`${names.length} sub-heads selected`;
+}
+function repSubRebuild(){
+  const panel=document.getElementById('repSubPanel');
+  if(!panel)return;
+  const headIds=new Set([...document.querySelectorAll('.repHeadChk:checked')].map(c=>c.value));
+  const avail=(db.subHeads||[]).filter(s=>headIds.has(s.headId));
+  const prevIds=new Set([...panel.querySelectorAll('.repSubChk')].map(c=>c.value));
+  const prevChecked=new Set([...panel.querySelectorAll('.repSubChk:checked')].map(c=>c.value));
+  panel.innerHTML=`<label class="chk"><input type="checkbox" id="repSubAll" checked onchange="repSubToggleAll(this);repSubSync()">All Sub-Heads</label>`
+    +(avail.length?avail.map(s=>`<label class="chk"><input type="checkbox" class="repSubChk" value="${s.id}" ${!prevIds.has(s.id)||prevChecked.has(s.id)?'checked':''} onchange="repSubSync()">${s.name}</label>`).join('')
+      :'<p style="font-size:12px;color:#8896a6;margin:4px 0">No sub-heads for selected heads.</p>');
+  repSubSync();
 }
 document.addEventListener('click',e=>{
   document.querySelectorAll('.ms-panel:not(.hidden)').forEach(p=>{
@@ -825,17 +948,21 @@ function generateReport(){
   const fromStr=from.toISOString().slice(0,10),toStr=to.toISOString().slice(0,10);
   const repType=document.getElementById('repType').value;
   const repHeads=[...document.querySelectorAll('.repHeadChk:checked')].map(c=>c.value);
+  const repSubs=new Set([...document.querySelectorAll('.repSubChk:checked')].map(c=>c.value));
+  const subChkCount=document.querySelectorAll('.repSubChk').length;
   let rows=db.vouchers.filter(v=>v.date>=fromStr&&v.date<=toStr);
   if(repType==='Expense')rows=rows.filter(v=>v.type==='Payment');
   if(repType==='Income')rows=rows.filter(v=>v.type==='Receipt');
   if(repHeads.length&&repHeads.length<db.heads.length)rows=rows.filter(v=>repHeads.includes(v.headId));
+  if(repSubs.size<subChkCount)rows=rows.filter(v=>!v.subHeadId||repSubs.has(v.subHeadId));
   rows=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
   currentReportRows=rows;reportMeta={from:fromStr,to:toStr};
   const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
-  // Head-wise breakdown
+  // Head-wise breakdown (splits by sub-head where set)
   const hMap={};
-  rows.forEach(v=>{if(!hMap[v.headId])hMap[v.headId]={inc:0,exp:0};if(v.type==='Receipt')hMap[v.headId].inc+=v.amount;else hMap[v.headId].exp+=v.amount;});
+  rows.forEach(v=>{const k=v.headId+'|'+(v.subHeadId||'');if(!hMap[k])hMap[k]={inc:0,exp:0};if(v.type==='Receipt')hMap[k].inc+=v.amount;else hMap[k].exp+=v.amount;});
+  const headSubName=k=>{const [hId,sId]=k.split('|');const h=db.heads.find(x=>x.id===hId)||{name:'Unknown'};const sub=(db.subHeads||[]).find(s=>s.id===sId);return h.name+(sub?' → '+sub.name:'');};
   document.getElementById('reportResults').innerHTML=`
     <div class="noprint" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn-secondary" onclick="downloadPDF('docArea','Report-${fromStr}-to-${toStr}.pdf')"><i class="fa-solid fa-file-pdf"></i> PDF</button>
@@ -852,14 +979,14 @@ function generateReport(){
       </div>
       ${Object.keys(hMap).length>1?`<h4 style="margin:14px 0 8px;color:var(--primary)">Head-wise Summary</h4>
       <table class="doc-table"><thead><tr><th>Account Head</th><th>Income</th><th>Expense</th><th>Net</th></tr></thead>
-      <tbody>${Object.entries(hMap).map(([hId,d])=>{const h=db.heads.find(x=>x.id===hId)||{name:'Unknown'};return `<tr><td>${h.name}</td><td>${money(d.inc)}</td><td>${money(d.exp)}</td><td style="font-weight:700">${money(d.inc-d.exp)}</td></tr>`;}).join('')}</tbody></table>`:''}
+      <tbody>${Object.entries(hMap).map(([k,d])=>`<tr><td>${headSubName(k)}</td><td style="white-space:nowrap">${money(d.inc)}</td><td style="white-space:nowrap">${money(d.exp)}</td><td style="font-weight:700;white-space:nowrap">${money(d.inc-d.exp)}</td></tr>`).join('')}</tbody></table>`:''}
       <h4 style="margin:18px 0 8px;color:var(--primary)">All Transactions (${rows.length})</h4>
       <table class="doc-table">
         <thead><tr><th>Date</th><th>Voucher No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
-        <tbody>${rows.map(v=>{const h=db.heads.find(x=>x.id===v.headId)||{name:'—'};
-          return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${h.name}</td><td style="color:${v.type==='Payment'?'#c0392b':'#1e8449'};font-weight:600">${v.type}</td><td>${v.party||'—'}</td><td style="font-size:12px;color:#666">${v.description||'—'}</td><td style="text-align:right;font-weight:600">${money(v.amount)}</td></tr>`;
+        <tbody>${rows.map(v=>{
+          return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${headLabel(v)}</td><td style="color:${v.type==='Payment'?'#c0392b':'#1e8449'};font-weight:600">${v.type}</td><td>${v.party||'—'}</td><td style="font-size:12px;color:#666">${v.description||'—'}</td><td style="text-align:right;font-weight:600;white-space:nowrap;font-size:13px">${money(v.amount)}</td></tr>`;
         }).join('')||'<tr class="empty-row"><td colspan="7">No records found for selected filters.</td></tr>'}
-        ${rows.length?`<tr style="background:#f0f3f7"><td colspan="6" style="text-align:right;font-weight:800;padding:12px 14px">TOTAL</td><td style="text-align:right;font-weight:800;padding:12px 14px">${money(rows.reduce((s,v)=>s+v.amount,0))}</td></tr>`:''}</tbody>
+        ${rows.length?`<tr style="background:#f0f3f7"><td colspan="6" style="text-align:right;font-weight:800;padding:12px 14px">TOTAL</td><td style="text-align:right;font-weight:800;padding:12px 14px;white-space:nowrap;font-size:13.5px">${money(rows.reduce((s,v)=>s+v.amount,0))}</td></tr>`:''}</tbody>
       </table>
       <p style="text-align:center;font-size:11px;color:#bbb;margin-top:20px">Generated by ${db.settings.companyName} ERP • ${new Date().toLocaleString()}</p>
     </div>`;
@@ -867,9 +994,9 @@ function generateReport(){
 
 function exportExcel(){
   if(!currentReportRows.length){toast('Generate a report first.','warn');return;}
-  const data=currentReportRows.map(v=>{const h=db.heads.find(x=>x.id===v.headId)||{name:'',group:''};return{Date:v.date,VoucherNo:v.no,Head:h.name,Group:h.group||'',Type:v.type,Party:v.party||'',Description:v.description||'',Amount:v.amount,CreatedBy:v.createdBy};});
+  const data=currentReportRows.map(v=>{const h=db.heads.find(x=>x.id===v.headId)||{name:'',group:''};const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);return{Date:v.date,VoucherNo:v.no,Head:h.name,SubHead:sub?.name||'',Group:h.group||'',Type:v.type,Party:v.party||'',Description:v.description||'',Amount:v.amount,CreatedBy:v.createdBy};});
   const ws=XLSX.utils.json_to_sheet(data);
-  ws['!cols']=[{wch:12},{wch:18},{wch:22},{wch:14},{wch:12},{wch:20},{wch:30},{wch:14},{wch:18}];
+  ws['!cols']=[{wch:12},{wch:18},{wch:22},{wch:18},{wch:14},{wch:12},{wch:20},{wch:30},{wch:14},{wch:18}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Report');
   XLSX.writeFile(wb,`${db.settings.companyName}-Report-${reportMeta.from}-to-${reportMeta.to}.xlsx`);
   toast('Excel downloaded!');
@@ -1009,16 +1136,40 @@ async function downloadPDF(elId,filename){
   if(!el){toast('Nothing to export.','warn');return;}
   toast('Generating PDF...');
   try{
-    const canvas=await html2canvas(el,{scale:2,useCORS:true,logging:false,backgroundColor:'#fff'});
-    const imgData=canvas.toDataURL('image/png');
+    const scale=2;
+    const canvas=await html2canvas(el,{scale,useCORS:true,logging:false,backgroundColor:'#fff'});
     const{jsPDF}=window.jspdf;
     const pdf=new jsPDF('p','pt','a4');
     const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
-    const props=pdf.getImageProperties(imgData);
-    const imgH=(props.height*pw)/props.width;
-    let hl=imgH,pos=0;
-    pdf.addImage(imgData,'PNG',0,pos,pw,imgH);hl-=ph;
-    while(hl>0){pos=hl-imgH;pdf.addPage();pdf.addImage(imgData,'PNG',0,pos,pw,imgH);hl-=ph;}
+    const renderW=canvas.width/scale; // DOM px width as rendered
+    const pageDomH=ph*renderW/pw;    // DOM px that fit one PDF page
+    const totalDomH=canvas.height/scale;
+
+    // Element ranges (in DOM px, relative to the captured element) that must not be split
+    const elRect=el.getBoundingClientRect();
+    const ranges=[...el.querySelectorAll('tr,img,h2,h3,h4,p,.s-card,.sign-row,.doc-header,.summary-cards')]
+      .map(n=>{const r=n.getBoundingClientRect();return{top:r.top-elRect.top,bottom:r.bottom-elRect.top};});
+
+    let y=0,first=true;
+    while(y<totalDomH-1){
+      let end=Math.min(y+pageDomH,totalDomH);
+      if(end<totalDomH){
+        // If an element straddles the cut, move the cut up to its top edge
+        let safe=end;
+        for(const r of ranges){
+          if(r.top<safe-4&&r.bottom>safe+4)safe=Math.min(safe,r.top);
+        }
+        if(safe>y+10)end=safe;
+      }
+      const sh=Math.max(1,Math.round((end-y)*scale));
+      const page=document.createElement('canvas');
+      page.width=canvas.width;page.height=sh;
+      page.getContext('2d').drawImage(canvas,0,Math.round(y*scale),canvas.width,sh,0,0,canvas.width,sh);
+      if(!first)pdf.addPage();
+      pdf.addImage(page.toDataURL('image/png'),'PNG',0,0,pw,sh*pw/canvas.width);
+      first=false;
+      y=end;
+    }
     pdf.save(filename||'Document.pdf');
     toast('PDF downloaded!');
   }catch(err){toast('PDF failed — use Print button instead.','error');console.error(err);}

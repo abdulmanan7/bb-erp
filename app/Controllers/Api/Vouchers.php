@@ -4,6 +4,7 @@ namespace App\Controllers\Api;
 
 use App\Models\EmployeeModel;
 use App\Models\HeadModel;
+use App\Models\SubHeadModel;
 use App\Models\VoucherModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -27,6 +28,11 @@ class Vouchers extends BaseApiController
             return $this->fail('This head is not assigned to you.', 403);
         }
 
+        $subHeadId = (string) ($b['subHeadId'] ?? '');
+        if ($subHeadId !== '' && ! (new SubHeadModel())->where('id', $subHeadId)->where('head_id', $head['id'])->first()) {
+            return $this->fail('Invalid sub-head.');
+        }
+
         $amount = (float) ($b['amount'] ?? 0);
         if ($amount <= 0) {
             return $this->fail('Amount must be greater than zero.');
@@ -48,6 +54,7 @@ class Vouchers extends BaseApiController
             'type'        => $type,
             'v_date'      => $date,
             'head_id'     => $head['id'],
+            'sub_head_id' => $subHeadId,
             'amount'      => $amount,
             'party'       => trim((string) ($b['party'] ?? '')),
             'description' => trim((string) ($b['description'] ?? '')),
@@ -71,6 +78,11 @@ class Vouchers extends BaseApiController
         if (! $head) {
             return $this->fail('Select a valid account head.');
         }
+        $subHeadId = (string) ($b['subHeadId'] ?? '');
+        if ($subHeadId !== '' && ! (new SubHeadModel())->where('id', $subHeadId)->where('head_id', $head['id'])->first()) {
+            return $this->fail('Invalid sub-head.');
+        }
+
         $amount = (float) ($b['amount'] ?? 0);
         if ($amount <= 0) {
             return $this->fail('Amount must be greater than zero.');
@@ -93,6 +105,7 @@ class Vouchers extends BaseApiController
             'type'        => $head['type'] === 'Expense' ? 'Payment' : 'Receipt',
             'v_date'      => $this->validDate($b['date'] ?? ''),
             'head_id'     => $head['id'],
+            'sub_head_id' => $subHeadId,
             'amount'      => $amount,
             'party'       => trim((string) ($b['party'] ?? '')),
             'description' => trim((string) ($b['description'] ?? '')),

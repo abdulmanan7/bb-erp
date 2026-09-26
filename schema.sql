@@ -44,6 +44,14 @@ CREATE TABLE IF NOT EXISTS `heads` (
   `created_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS `sub_heads` (
+  `id` varchar(32) NOT NULL PRIMARY KEY,
+  `head_id` varchar(32) NOT NULL,
+  `name` varchar(150) NOT NULL,
+  `created_at` datetime DEFAULT NULL,
+  KEY `idx_head` (`head_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS `employees` (
   `id` varchar(32) NOT NULL PRIMARY KEY,
   `name` varchar(150) NOT NULL,
@@ -64,6 +72,7 @@ CREATE TABLE IF NOT EXISTS `vouchers` (
   `type` enum('Payment','Receipt') NOT NULL,
   `v_date` date NOT NULL,
   `head_id` varchar(32) NOT NULL DEFAULT '',
+  `sub_head_id` varchar(32) NOT NULL DEFAULT '',
   `amount` decimal(14,2) NOT NULL DEFAULT 0,
   `party` varchar(150) NOT NULL DEFAULT '',
   `description` text,

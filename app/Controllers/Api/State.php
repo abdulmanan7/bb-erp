@@ -7,6 +7,7 @@ use App\Models\HeadModel;
 use App\Models\InvoiceModel;
 use App\Models\SalarySlipModel;
 use App\Models\SettingModel;
+use App\Models\SubHeadModel;
 use App\Models\VoucherModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -28,6 +29,7 @@ class State extends BaseApiController
             return $this->json([
                 'settings'  => $settings->mapped(),
                 'heads'     => $heads->allMapped(),
+                'subHeads'  => (new SubHeadModel())->allMapped(),
                 'vouchers'  => $vouchers->allMapped(),
                 'employees' => $employees->allMapped(),
                 'invoices'  => (new InvoiceModel())->allMapped(),
@@ -43,6 +45,10 @@ class State extends BaseApiController
             'heads'     => array_values(array_filter(
                 $heads->allMapped(),
                 fn ($h) => in_array($h['id'], $assigned, true)
+            )),
+            'subHeads'  => array_values(array_filter(
+                (new SubHeadModel())->allMapped(),
+                fn ($s) => in_array($s['headId'], $assigned, true)
             )),
             'vouchers'  => array_values(array_filter(
                 $vouchers->allMapped(),
