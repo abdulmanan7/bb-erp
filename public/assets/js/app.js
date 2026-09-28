@@ -373,13 +373,20 @@ function headLabel(v){
 function voucherRowHtml(v){
   const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
   return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${headLabel(v)}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td style="white-space:nowrap"><strong>${money(v.amount)}</strong></td><td style="color:#888;font-size:12px">${v.createdBy}</td>
-  <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+  <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="viewVoucher('${v.id}')" title="View"><i class="fa-solid fa-eye"></i></button> <button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
 }
 
 function vouchCountText(rows){
   const pay=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const rec=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   return `Showing ${rows.length} of ${db.vouchers.length} vouchers — Payments ${money(pay)} • Receipts ${money(rec)}`;
+}
+
+function vouchFootHtml(rows){
+  if(!rows.length)return'';
+  const pay=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
+  const rec=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
+  return `<tr style="background:#f7f9fc"><td colspan="6" style="text-align:right;font-weight:700;padding:12px 14px">Filtered totals — Payments ${money(pay)} • Receipts ${money(rec)}</td><td style="font-weight:800;padding:12px 14px;white-space:nowrap;color:${rec-pay>=0?'var(--success)':'var(--danger)'}">${money(rec-pay)}</td><td colspan="2"></td></tr>`;
 }
 
 function vfSubOptions(){
@@ -413,6 +420,7 @@ function renderVouchTable(){
   const rows=filteredVouchers();
   const {slice,pages}=vouchPageSlice(rows);
   document.getElementById('vouchBody').innerHTML=slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>';
+  document.getElementById('vouchFoot').innerHTML=vouchFootHtml(rows);
   document.getElementById('vouchCount').textContent=vouchCountText(rows);
   document.getElementById('vouchPager').innerHTML=vouchPagerHtml(rows.length,pages);
 }
@@ -464,6 +472,7 @@ function renderVouchersPage(){
     <table class="list-table">
       <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th>Amount</th><th>By</th><th>Actions</th></tr></thead>
       <tbody id="vouchBody">${slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>'}</tbody>
+      <tfoot id="vouchFoot">${vouchFootHtml(rows)}</tfoot>
     </table>
     <div class="pager" id="vouchPager">${vouchPagerHtml(rows.length,pages)}</div>`);
 }
@@ -564,6 +573,29 @@ async function saveVoucher(e,id){
   await loadState();closeModal();
   if(id){toast('Voucher updated.');openVoucherPrint(id);}
   else{toast('Voucher created!');openVoucherPrint(r.voucher.id);}
+}
+
+function viewVoucher(id){
+  const v=db.vouchers.find(x=>x.id===id);if(!v)return;
+  const h=db.heads.find(x=>x.id===v.headId)||{name:'—',type:''};
+  const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);
+  const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
+  const row=(l,val)=>`<tr><td style="padding:9px 12px 9px 0;color:#8896a6;font-size:12.5px;width:120px;vertical-align:top">${l}</td><td style="padding:9px 0;font-size:14px">${val}</td></tr>`;
+  showModal(`<div class="modal-header"><h3><i class="fa-solid fa-receipt"></i> ${v.no}</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
+    <table style="width:100%;border-collapse:collapse">
+      ${row('Type',badge)}
+      ${row('Date',dateStr(v.date))}
+      ${row('Head',`${h.name}${h.type?' ('+h.type+')':''}${sub?' → <strong>'+sub.name+'</strong>':''}`)}
+      ${row(v.type==='Payment'?'Paid To':'Received From',v.party||'—')}
+      ${row('Description',v.description||'—')}
+      ${row('Amount',`<span style="font-size:20px;font-weight:800;color:var(--primary)">${money(v.amount)}</span>`)}
+      ${row('Created By',v.createdBy||'—')}
+      ${v.attachment?row('Attachment',`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank"><i class="fa-solid fa-paperclip"></i> ${v.attachment}</a>`):''}
+    </table>
+    <div class="modal-actions">
+      <button type="button" class="btn-secondary" onclick="closeModal();voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+      <button type="button" class="btn-primary" onclick="closeModal();openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> Print / PDF</button>
+    </div>`);
 }
 
 async function deleteVoucher(id){
@@ -859,7 +891,7 @@ function renderReportsPage(){
         </div>
         <div id="repFromWrap" style="display:none"><label>From</label><input type="date" id="repFrom"></div>
         <div id="repToWrap" style="display:none"><label>To</label><input type="date" id="repTo"></div>
-        <div><label>Type</label><select id="repType"><option>All</option><option>Expense</option><option>Income</option></select></div>
+        <div><label>Type</label><select id="repType"><option>All</option><option value="Expense">Cash Out</option><option value="Income">Cash In</option></select></div>
         <div style="flex:2;min-width:220px"><label>Heads</label>
           <div class="ms-wrap">
             <button type="button" class="ms-btn" onclick="repHeadToggle()">
@@ -979,13 +1011,12 @@ function generateReport(){
       <h3 style="text-align:center;color:var(--primary)">FINANCIAL REPORT</h3>
       <p style="text-align:center;color:#888;margin-bottom:18px">${dateStr(fromStr)} — ${dateStr(toStr)}</p>
       <div class="summary-cards">
-        <div class="s-card income"><div class="label">Total Income</div><div class="value">${money(inc)}</div></div>
-        <div class="s-card expense"><div class="label">Total Expense</div><div class="value">${money(exp)}</div></div>
-        <div class="s-card net"><div class="label">Net Balance</div><div class="value">${money(inc-exp)}</div></div>
+        <div class="s-card income"><div class="label">Total Cash In</div><div class="value">${money(inc)}</div></div>
+        <div class="s-card expense"><div class="label">Total Cash Out</div><div class="value">${money(exp)}</div></div>
       </div>
       ${Object.keys(hMap).length>1?`<h4 style="margin:14px 0 8px;color:var(--primary)">Head-wise Summary</h4>
-      <table class="doc-table"><thead><tr><th>Account Head</th><th>Income</th><th>Expense</th><th>Net</th></tr></thead>
-      <tbody>${Object.entries(hMap).map(([k,d])=>`<tr><td>${headSubName(k)}</td><td style="white-space:nowrap">${money(d.inc)}</td><td style="white-space:nowrap">${money(d.exp)}</td><td style="font-weight:700;white-space:nowrap">${money(d.inc-d.exp)}</td></tr>`).join('')}</tbody></table>`:''}
+      <table class="doc-table"><thead><tr><th>Account Head</th><th>Cash In</th><th>Cash Out</th></tr></thead>
+      <tbody>${Object.entries(hMap).map(([k,d])=>`<tr><td>${headSubName(k)}</td><td style="white-space:nowrap">${money(d.inc)}</td><td style="white-space:nowrap">${money(d.exp)}</td></tr>`).join('')}</tbody></table>`:''}
       <h4 style="margin:18px 0 8px;color:var(--primary)">All Transactions (${rows.length})</h4>
       <table class="doc-table">
         <thead><tr><th>Date</th><th>Voucher No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
