@@ -114,7 +114,7 @@ async function doLogin(e){
   const u=document.getElementById('lUser').value.trim();
   const p=document.getElementById('lPass').value;
   const r=await api('login','POST',{username:u,password:p},true);
-  if(r&&r.user){session=r.user;await loadState();route=savedRoute(session.role);sessionStorage.setItem('bb_route',route);render();toast(`Welcome, ${session.name}!`);}
+  if(r&&r.user){session=r.user;await loadState();route=resolveRoute(session.role);syncUrl(route);sessionStorage.setItem('bb_route',route);render();toast(`Welcome, ${session.name}!`);}
   else{document.getElementById('loginErr').textContent='Invalid username or password.';}
 }
 
@@ -160,11 +160,28 @@ function shell(content){
   </div>`;
 }
 
-function navigate(r){route=r;sessionStorage.setItem('bb_route',r);render();}
+const ROUTES={admin:['dashboard','heads','employees','vouchers','invoices','salary','reports','settings'],staff:['add','mine']};
+function defaultPage(role){return role==='admin'?'dashboard':'add';}
+function routeFromUrl(){
+  const seg=location.pathname.split('/').filter(Boolean).pop();
+  return (ROUTES.admin.includes(seg)||ROUTES.staff.includes(seg))?seg:null;
+}
+function resolveRoute(role){
+  const u=routeFromUrl();
+  return u&&ROUTES[role].includes(u)?u:savedRoute(role);
+}
+function syncUrl(r,replace=true){
+  try{history[replace?'replaceState':'pushState']({},'',r===defaultPage(session?.role)?'.':r);}catch(e){}
+}
+function navigate(r){route=r;syncUrl(r,false);sessionStorage.setItem('bb_route',r);render();}
+window.addEventListener('popstate',()=>{
+  const r=routeFromUrl();
+  if(r&&session&&ROUTES[session.role].includes(r)){route=r;sessionStorage.setItem('bb_route',r);render();}
+});
 function savedRoute(role){
-  const allowed=role==='admin'?['dashboard','heads','employees','vouchers','invoices','salary','reports','settings']:['add','mine'];
+  const allowed=ROUTES[role]||ROUTES.staff;
   const r=sessionStorage.getItem('bb_route');
-  return allowed.includes(r)?r:(role==='admin'?'dashboard':'add');
+  return allowed.includes(r)?r:defaultPage(role);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -384,9 +401,8 @@ function vouchCountText(rows){
 
 function vouchFootHtml(rows){
   if(!rows.length)return'';
-  const pay=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
-  const rec=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
-  return `<tr style="background:#f7f9fc"><td colspan="6" style="text-align:right;font-weight:700;padding:12px 14px">Filtered totals — Payments ${money(pay)} • Receipts ${money(rec)}</td><td style="font-weight:800;padding:12px 14px;white-space:nowrap;color:${rec-pay>=0?'var(--success)':'var(--danger)'}">${money(rec-pay)}</td><td colspan="2"></td></tr>`;
+  const total=rows.reduce((s,v)=>s+v.amount,0);
+  return `<tr style="background:#f7f9fc"><td colspan="6" style="text-align:right;font-weight:700;padding:12px 14px">TOTAL</td><td style="font-weight:800;padding:12px 14px;white-space:nowrap">${money(total)}</td><td colspan="2"></td></tr>`;
 }
 
 function vfSubOptions(){
@@ -1241,7 +1257,7 @@ async function init(){
   if(me){
     db.settings=Object.assign({},defaultSettings(),me.settings||{});
     applyTheme();
-    if(me.user){session=me.user;route=savedRoute(session.role);sessionStorage.setItem('bb_route',route);await loadState();}
+    if(me.user){session=me.user;route=resolveRoute(session.role);sessionStorage.setItem('bb_route',route);await loadState();}
   }
   render();
 }

@@ -46,3 +46,7 @@ $routes->group('api', static function (RouteCollection $routes) {
     $routes->post('backup/import', 'Api\Backup::import', ['filter' => 'auth:admin']);
     $routes->post('reset', 'Api\Backup::reset', ['filter' => 'auth:admin']);
 });
+
+// SPA page URLs (/vouchers, /reports, …) — serve the shell; assets are real
+// files so Apache/nginx never routes them here. Kept after the api group.
+$routes->get('(:segment)', 'Home::index');
