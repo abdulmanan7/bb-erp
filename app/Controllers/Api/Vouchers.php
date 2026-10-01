@@ -33,9 +33,9 @@ class Vouchers extends BaseApiController
             return $this->fail('Invalid sub-head.');
         }
 
-        $amount = (float) ($b['amount'] ?? 0);
-        if ($amount <= 0) {
-            return $this->fail('Amount must be greater than zero.');
+        $amounts = $this->amounts($b);
+        if (is_string($amounts)) {
+            return $this->fail($amounts);
         }
 
         $date = $this->validDate($b['date'] ?? '');
@@ -55,7 +55,10 @@ class Vouchers extends BaseApiController
             'v_date'      => $date,
             'head_id'     => $head['id'],
             'sub_head_id' => $subHeadId,
-            'amount'      => $amount,
+            'amount'      => $amounts['paid'],
+            'total'       => $amounts['total'],
+            'paid'        => $amounts['paid'],
+            'status'      => $amounts['status'],
             'party'       => trim((string) ($b['party'] ?? '')),
             'description' => trim((string) ($b['description'] ?? '')),
             'attachment'  => $file === true ? (string) ($b['attachment']['name'] ?? '') : '',
@@ -83,9 +86,9 @@ class Vouchers extends BaseApiController
             return $this->fail('Invalid sub-head.');
         }
 
-        $amount = (float) ($b['amount'] ?? 0);
-        if ($amount <= 0) {
-            return $this->fail('Amount must be greater than zero.');
+        $amounts = $this->amounts($b);
+        if (is_string($amounts)) {
+            return $this->fail($amounts);
         }
 
         $attachment = $existing['attachment'];
@@ -106,7 +109,10 @@ class Vouchers extends BaseApiController
             'v_date'      => $this->validDate($b['date'] ?? ''),
             'head_id'     => $head['id'],
             'sub_head_id' => $subHeadId,
-            'amount'      => $amount,
+            'amount'      => $amounts['paid'],
+            'total'       => $amounts['total'],
+            'paid'        => $amounts['paid'],
+            'status'      => $amounts['status'],
             'party'       => trim((string) ($b['party'] ?? '')),
             'description' => trim((string) ($b['description'] ?? '')),
             'attachment'  => $attachment,
@@ -123,6 +129,31 @@ class Vouchers extends BaseApiController
         $m->delete($id);
         $this->deleteAttachmentFile($id);
         return $this->json(['ok' => true]);
+    }
+
+    /**
+     * Total = the voucher's full amount; paid = amount actually settled.
+     * amount stays equal to paid so cash-flow reports keep working.
+     * Returns ['total','paid','status'] or an error string.
+     */
+    private function amounts(array $b)
+    {
+        $total = (float) ($b['total'] ?? $b['amount'] ?? 0);
+        $paid = isset($b['paid']) ? (float) $b['paid'] : $total;
+        if ($total <= 0) {
+            return 'Total must be greater than zero.';
+        }
+        if ($paid < 0) {
+            return 'Paid amount cannot be negative.';
+        }
+        if ($paid > $total) {
+            return 'Paid amount cannot exceed the total.';
+        }
+        return [
+            'total'  => $total,
+            'paid'   => $paid,
+            'status' => $paid <= 0 ? 'pending' : ($paid >= $total ? 'paid' : 'partial'),
+        ];
     }
 
     /**

@@ -22,11 +22,15 @@ class Employees extends BaseApiController
         $m = new EmployeeModel();
         $id = $this->newId();
         $m->insert([
-            'id'          => $id,
-            'name'        => $name,
-            'phone'       => trim((string) ($b['phone'] ?? '')),
-            'designation' => trim((string) ($b['designation'] ?? '')),
-            'created_at'  => $this->now(),
+            'id'           => $id,
+            'name'         => $name,
+            'phone'        => trim((string) ($b['phone'] ?? '')),
+            'designation'  => trim((string) ($b['designation'] ?? '')),
+            'basic_salary' => (float) ($b['basic'] ?? 0),
+            'allowance'    => (float) ($b['allowance'] ?? 0),
+            'deduction'    => (float) ($b['deduction'] ?? 0),
+            'bonus'        => (float) ($b['bonus'] ?? 0),
+            'created_at'   => $this->now(),
         ]);
         $m->setAssignedHeads($id, (array) ($b['assignedHeads'] ?? []));
         $this->syncUser($id, $name, $b);
@@ -52,9 +56,13 @@ class Employees extends BaseApiController
         }
 
         $m->update($id, [
-            'name'        => $name,
-            'phone'       => trim((string) ($b['phone'] ?? '')),
-            'designation' => trim((string) ($b['designation'] ?? '')),
+            'name'         => $name,
+            'phone'        => trim((string) ($b['phone'] ?? '')),
+            'designation'  => trim((string) ($b['designation'] ?? '')),
+            'basic_salary' => (float) ($b['basic'] ?? 0),
+            'allowance'    => (float) ($b['allowance'] ?? 0),
+            'deduction'    => (float) ($b['deduction'] ?? 0),
+            'bonus'        => (float) ($b['bonus'] ?? 0),
         ]);
         $m->setAssignedHeads($id, (array) ($b['assignedHeads'] ?? []));
         $this->syncUser($id, $name, $b);

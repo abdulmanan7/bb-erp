@@ -12,6 +12,7 @@ class VoucherModel extends Model
     protected $useTimestamps = false;
     protected $allowedFields = [
         'id', 'no', 'type', 'v_date', 'head_id', 'sub_head_id', 'amount',
+        'total', 'paid', 'status',
         'party', 'description', 'attachment', 'created_by', 'created_at',
     ];
 
@@ -25,6 +26,9 @@ class VoucherModel extends Model
             'headId'      => $r['head_id'],
             'subHeadId'   => $r['sub_head_id'] ?? '',
             'amount'      => (float) $r['amount'],
+            'total'       => (float) ($r['total'] ?? $r['amount']),
+            'paid'        => (float) ($r['paid'] ?? $r['amount']),
+            'status'      => $r['status'] ?? 'paid',
             'party'       => $r['party'] ?? '',
             'description' => $r['description'] ?? '',
             'attachment'  => $r['attachment'] ?? '',

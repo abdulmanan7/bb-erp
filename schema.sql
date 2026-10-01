@@ -57,6 +57,10 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `name` varchar(150) NOT NULL,
   `phone` varchar(50) NOT NULL DEFAULT '',
   `designation` varchar(100) NOT NULL DEFAULT '',
+  `basic_salary` decimal(14,2) NOT NULL DEFAULT 0,
+  `allowance` decimal(14,2) NOT NULL DEFAULT 0,
+  `deduction` decimal(14,2) NOT NULL DEFAULT 0,
+  `bonus` decimal(14,2) NOT NULL DEFAULT 0,
   `created_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -74,6 +78,9 @@ CREATE TABLE IF NOT EXISTS `vouchers` (
   `head_id` varchar(32) NOT NULL DEFAULT '',
   `sub_head_id` varchar(32) NOT NULL DEFAULT '',
   `amount` decimal(14,2) NOT NULL DEFAULT 0,
+  `total` decimal(14,2) NOT NULL DEFAULT 0,
+  `paid` decimal(14,2) NOT NULL DEFAULT 0,
+  `status` enum('pending','partial','paid') NOT NULL DEFAULT 'paid',
   `party` varchar(150) NOT NULL DEFAULT '',
   `description` text,
   `attachment` varchar(255) NOT NULL DEFAULT '',
@@ -116,5 +123,7 @@ CREATE TABLE IF NOT EXISTS `salary_slips` (
   `deduction` decimal(14,2) NOT NULL DEFAULT 0,
   `bonus` decimal(14,2) NOT NULL DEFAULT 0,
   `total` decimal(14,2) NOT NULL DEFAULT 0,
+  `status` enum('pending','paid') NOT NULL DEFAULT 'pending',
+  `voucher_id` varchar(32) NOT NULL DEFAULT '',
   `created_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

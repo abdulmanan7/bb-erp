@@ -193,11 +193,15 @@ class Backup extends BaseApiController
         foreach ($rows as $e) {
             $id = (string) ($e['id'] ?? $this->newId());
             $m->insert([
-                'id'          => $id,
-                'name'        => (string) ($e['name'] ?? ''),
-                'phone'       => (string) ($e['phone'] ?? ''),
-                'designation' => (string) ($e['designation'] ?? ''),
-                'created_at'  => $this->now(),
+                'id'           => $id,
+                'name'         => (string) ($e['name'] ?? ''),
+                'phone'        => (string) ($e['phone'] ?? ''),
+                'designation'  => (string) ($e['designation'] ?? ''),
+                'basic_salary' => (float) ($e['basic'] ?? 0),
+                'allowance'    => (float) ($e['allowance'] ?? 0),
+                'deduction'    => (float) ($e['deduction'] ?? 0),
+                'bonus'        => (float) ($e['bonus'] ?? 0),
+                'created_at'   => $this->now(),
             ]);
             $m->setAssignedHeads($id, (array) ($e['assignedHeads'] ?? []));
         }
@@ -214,7 +218,10 @@ class Backup extends BaseApiController
                 'v_date'      => $this->validDate($v['date'] ?? ''),
                 'head_id'     => (string) ($v['headId'] ?? ''),
                 'sub_head_id' => (string) ($v['subHeadId'] ?? ''),
-                'amount'      => (float) ($v['amount'] ?? 0),
+                'amount'      => (float) ($v['amount'] ?? $v['paid'] ?? 0),
+                'total'       => (float) ($v['total'] ?? $v['amount'] ?? 0),
+                'paid'        => (float) ($v['paid'] ?? $v['amount'] ?? 0),
+                'status'      => in_array($v['status'] ?? '', ['pending', 'partial'], true) ? $v['status'] : 'paid',
                 'party'       => (string) ($v['party'] ?? ''),
                 'description' => (string) ($v['description'] ?? ''),
                 'created_by'  => (string) ($v['createdBy'] ?? ''),

@@ -36,6 +36,8 @@ $routes->group('api', static function (RouteCollection $routes) {
     $routes->delete('invoices/(:segment)', 'Api\Invoices::delete/$1', ['filter' => 'auth:admin']);
 
     // Salary slips — admin only
+    $routes->post('salary/generate', 'Api\Salary::generate', ['filter' => 'auth:admin']);
+    $routes->post('salary/(:segment)/paid', 'Api\Salary::markPaid/$1', ['filter' => 'auth:admin']);
     $routes->post('salary', 'Api\Salary::create', ['filter' => 'auth:admin']);
     $routes->put('salary/(:segment)', 'Api\Salary::update/$1', ['filter' => 'auth:admin']);
     $routes->delete('salary/(:segment)', 'Api\Salary::delete/$1', ['filter' => 'auth:admin']);

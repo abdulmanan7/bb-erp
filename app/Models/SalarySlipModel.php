@@ -13,7 +13,7 @@ class SalarySlipModel extends Model
     protected $allowedFields = [
         'id', 'employee_id', 'employee_name', 'designation', 'phone',
         'sal_month', 'sal_year', 'basic', 'allowance', 'deduction',
-        'bonus', 'total', 'created_at',
+        'bonus', 'total', 'status', 'voucher_id', 'created_at',
     ];
 
     public static function map(array $r): array
@@ -31,6 +31,8 @@ class SalarySlipModel extends Model
             'deduction'    => (float) ($r['deduction'] ?? 0),
             'bonus'        => (float) ($r['bonus'] ?? 0),
             'total'        => (float) $r['total'],
+            'status'       => $r['status'] ?? 'pending',
+            'voucherId'    => $r['voucher_id'] ?? '',
             'createdAt'    => $r['created_at'] ?? null,
         ];
     }

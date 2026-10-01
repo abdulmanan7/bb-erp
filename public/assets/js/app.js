@@ -187,16 +187,29 @@ function savedRoute(role){
 /* ═══════════════════════════════════════════════════
    DASHBOARD
 ═══════════════════════════════════════════════════ */
+let dashFrom='',dashTo='';
+function dashRange(){
+  const now=new Date();
+  return {
+    from:dashFrom||`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`,
+    to:dashTo||now.toISOString().slice(0,10),
+  };
+}
+function applyDashRange(){
+  dashFrom=document.getElementById('dashFrom').value;
+  dashTo=document.getElementById('dashTo').value;
+  render();
+}
+
 function renderDashboard(){
   const now=new Date();
-  const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const tm=db.vouchers.filter(v=>v.date?.slice(0,7)===ym);
+  const {from,to}=dashRange();
+  const tm=db.vouchers.filter(v=>v.date>=from&&v.date<=to);
   const inc=tm.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const aInc=db.vouchers.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const aExp=db.vouchers.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
-  const recent=[...db.vouchers].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10);
-  const mn=now.toLocaleString('en',{month:'long'});
+  const recent=[...tm].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10);
   return shell(`
     <div class="page-header">
       <h2><i class="fa-solid fa-gauge-high"></i> Dashboard</h2>
@@ -205,10 +218,19 @@ function renderDashboard(){
     ${db.heads.length===0?`<div style="background:#fff8e6;border:1px solid #ffd97d;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:14px;color:#9a6800">
       <i class="fa-solid fa-triangle-exclamation"></i> No account heads yet — <a onclick="navigate('heads')" style="cursor:pointer;font-weight:700;color:var(--primary)">Add your first head</a> to start recording transactions.
     </div>`:''}
+    <div class="page-title-bar" style="padding:12px 18px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:11.5px;font-weight:700;color:#5b6b7d;letter-spacing:.5px"><i class="fa-solid fa-calendar-days"></i> RANGE</span>
+        <input type="date" id="dashFrom" value="${from}" style="width:auto;margin-top:0" onchange="applyDashRange()">
+        <span style="color:#8896a6">→</span>
+        <input type="date" id="dashTo" value="${to}" style="width:auto;margin-top:0" onchange="applyDashRange()">
+        <button class="link-btn" onclick="dashFrom='';dashTo='';render()"><i class="fa-solid fa-rotate-left"></i> This month</button>
+      </div>
+    </div>
     <div class="summary-cards">
-      <div class="s-card income"><div class="label">${mn} Income</div><div class="value">${money(inc)}</div></div>
-      <div class="s-card expense"><div class="label">${mn} Expense</div><div class="value">${money(exp)}</div></div>
-      <div class="s-card net"><div class="label">${mn} Net</div><div class="value">${money(inc-exp)}</div></div>
+      <div class="s-card income"><div class="label">Cash In</div><div class="value">${money(inc)}</div></div>
+      <div class="s-card expense"><div class="label">Cash Out</div><div class="value">${money(exp)}</div></div>
+      <div class="s-card net"><div class="label">Net</div><div class="value">${money(inc-exp)}</div></div>
       <div class="s-card neutral"><div class="label">Overall Balance</div><div class="value">${money(aInc-aExp)}</div></div>
     </div>
     <div class="quick-actions">
@@ -218,7 +240,7 @@ function renderDashboard(){
       <button class="btn-secondary" onclick="navigate('reports')"><i class="fa-solid fa-chart-line"></i> Reports</button>
     </div>
     <div class="page-title-bar">
-      <strong>Recent Transactions</strong>
+      <strong>Transactions <span style="color:#8896a6;font-weight:500;font-size:12.5px">${dateStr(from)} — ${dateStr(to)}</span></strong>
       <button class="btn-secondary" style="font-size:13px;padding:7px 14px" onclick="navigate('vouchers')">View All <i class="fa-solid fa-arrow-right"></i></button>
     </div>
     <table class="list-table">
@@ -227,7 +249,7 @@ function renderDashboard(){
         const h=db.heads.find(x=>x.id===v.headId)||{name:'—'};
         const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
         return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${h.name}</td><td>${badge}</td><td>${v.party||'—'}</td><td><strong>${money(v.amount)}</strong></td><td style="color:#888;font-size:12px">${v.createdBy}</td><td><button class="link-btn" onclick="openVoucherPrint('${v.id}')">View</button></td></tr>`;
-      }).join('')||'<tr class="empty-row"><td colspan="8">No transactions yet.</td></tr>'}</tbody>
+      }).join('')||'<tr class="empty-row"><td colspan="8">No transactions in this range.</td></tr>'}</tbody>
     </table>`);
 }
 
@@ -304,13 +326,13 @@ function renderEmployeesPage(){
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-users"></i> Employees & Access</h2><button class="btn-primary" onclick="employeeForm()"><i class="fa-solid fa-plus"></i> Add Employee</button></div>
     <table class="list-table">
-      <thead><tr><th>Name</th><th>Phone</th><th>Designation</th><th>Login</th><th>Allowed Heads</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Phone</th><th>Designation</th><th>Salary</th><th>Login</th><th>Allowed Heads</th><th>Actions</th></tr></thead>
       <tbody>${db.employees.map(emp=>{
         const heads=(emp.assignedHeads||[]).map(id=>{const h=db.heads.find(x=>x.id===id);return h?`<span class="badge badge-neutral" style="margin:1px">${h.name}</span>`:null;}).filter(Boolean).join('');
         const lb=emp.loginEnabled?`<span class="badge badge-income"><i class="fa-solid fa-check"></i> ${emp.username}</span>`:`<span class="badge badge-neutral">Disabled</span>`;
-        return `<tr><td><strong>${emp.name}</strong></td><td>${emp.phone||'—'}</td><td>${emp.designation||'—'}</td><td>${lb}</td><td>${heads||'—'}</td>
+        return `<tr><td><strong>${emp.name}</strong></td><td>${emp.phone||'—'}</td><td>${emp.designation||'—'}</td><td style="white-space:nowrap">${emp.basic?`<strong>${money(emp.basic)}</strong>`:'—'}</td><td>${lb}</td><td>${heads||'—'}</td>
         <td><button class="link-btn" onclick="employeeForm('${emp.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteEmployee('${emp.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
-      }).join('')||'<tr class="empty-row"><td colspan="6">No employees yet.</td></tr>'}</tbody>
+      }).join('')||'<tr class="empty-row"><td colspan="7">No employees yet.</td></tr>'}</tbody>
     </table>`);
 }
 
@@ -323,6 +345,17 @@ function employeeForm(id){
       <div class="row-inline">
         <div><label>Phone / WhatsApp</label><input id="ePhone" value="${emp.phone||''}" placeholder="923001234567"></div>
         <div><label>Designation</label><input id="eDesig" value="${emp.designation||''}"></div>
+      </div>
+      <hr class="section-divider">
+      <strong style="font-size:12.5px;color:var(--primary)"><i class="fa-solid fa-money-bill-wave"></i> SALARY DEFAULTS</strong>
+      <p style="font-size:12px;color:#8896a6;margin:4px 0 2px">Auto-filled when generating a salary slip.</p>
+      <div class="row-inline">
+        <div><label>Basic Salary</label><input type="number" id="eBasic" value="${emp.basic||0}" min="0"></div>
+        <div><label>Allowances</label><input type="number" id="eAllow" value="${emp.allowance||0}" min="0"></div>
+      </div>
+      <div class="row-inline">
+        <div><label>Deductions</label><input type="number" id="eDeduct" value="${emp.deduction||0}" min="0"></div>
+        <div><label>Bonus</label><input type="number" id="eBonus" value="${emp.bonus||0}" min="0"></div>
       </div>
       <hr class="section-divider">
       <label><input type="checkbox" id="eLogin" ${emp.loginEnabled?'checked':''} onchange="toggleLoginFields()"> Enable System Login</label>
@@ -346,7 +379,9 @@ function toggleLoginFields(){document.getElementById('loginFields').style.displa
 async function saveEmployee(e,id){
   e.preventDefault();
   const assignedHeads=[...document.querySelectorAll('#loginFields input[type=checkbox]:checked')].map(c=>c.value);
-  const data={name:document.getElementById('eName').value.trim(),phone:document.getElementById('ePhone').value.trim(),designation:document.getElementById('eDesig').value.trim(),loginEnabled:document.getElementById('eLogin').checked,username:document.getElementById('eUser').value.trim(),password:document.getElementById('ePass').value,assignedHeads};
+  const data={name:document.getElementById('eName').value.trim(),phone:document.getElementById('ePhone').value.trim(),designation:document.getElementById('eDesig').value.trim(),loginEnabled:document.getElementById('eLogin').checked,username:document.getElementById('eUser').value.trim(),password:document.getElementById('ePass').value,assignedHeads,
+    basic:Number(document.getElementById('eBasic').value)||0,allowance:Number(document.getElementById('eAllow').value)||0,
+    deduction:Number(document.getElementById('eDeduct').value)||0,bonus:Number(document.getElementById('eBonus').value)||0};
   if(!data.name){toast('Name required.','error');return;}
   if(!await api('employees'+(id?'/'+id:''),id?'PUT':'POST',data))return;
   await loadState();closeModal();render();toast('Employee saved.');
@@ -362,12 +397,13 @@ async function deleteEmployee(id){
 /* ═══════════════════════════════════════════════════
    VOUCHERS
 ═══════════════════════════════════════════════════ */
-let vf={q:'',type:'All',head:'All',sub:'All',from:'',to:'',page:1,perPage:20};
+let vf={q:'',type:'All',head:'All',sub:'All',status:'All',from:'',to:'',page:1,perPage:20};
 
 function filteredVouchers(){
   const q=vf.q.toLowerCase();
   return db.vouchers.filter(v=>{
     if(vf.type!=='All'&&v.type!==vf.type)return false;
+    if(vf.status!=='All'&&(v.status||'paid')!==vf.status)return false;
     if(vf.head!=='All'&&v.headId!==vf.head)return false;
     if(vf.sub!=='All'&&v.subHeadId!==vf.sub)return false;
     if(vf.from&&v.date<vf.from)return false;
@@ -387,9 +423,14 @@ function headLabel(v){
   return h.name+(sub?` <span style="color:#8896a6;font-size:11.5px">→ ${sub.name}</span>`:'');
 }
 
+function vStatusBadge(v){
+  return v.status==='pending'?'<span class="badge badge-warn">Pending</span>'
+    :v.status==='partial'?'<span class="badge badge-neutral">Partial</span>'
+    :'<span class="badge badge-income">Paid</span>';
+}
 function voucherRowHtml(v){
   const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
-  return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${headLabel(v)}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td style="white-space:nowrap"><strong>${money(v.amount)}</strong></td><td style="color:#888;font-size:12px">${v.createdBy}</td>
+  return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${headLabel(v)}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td style="white-space:nowrap"><strong>${money(v.amount)}</strong>${v.total>v.amount?`<div style="font-size:11px;color:#8896a6">of ${money(v.total)}</div>`:''}</td><td>${vStatusBadge(v)}</td><td style="color:#888;font-size:12px">${v.createdBy}</td>
   <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="viewVoucher('${v.id}')" title="View"><i class="fa-solid fa-eye"></i></button> <button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
 }
 
@@ -402,7 +443,7 @@ function vouchCountText(rows){
 function vouchFootHtml(rows){
   if(!rows.length)return'';
   const total=rows.reduce((s,v)=>s+v.amount,0);
-  return `<tr style="background:#f7f9fc"><td colspan="6" style="text-align:right;font-weight:700;padding:12px 14px">TOTAL</td><td style="font-weight:800;padding:12px 14px;white-space:nowrap">${money(total)}</td><td colspan="2"></td></tr>`;
+  return `<tr style="background:#f7f9fc"><td colspan="6" style="text-align:right;font-weight:700;padding:12px 14px">TOTAL</td><td style="font-weight:800;padding:12px 14px;white-space:nowrap">${money(total)}</td><td colspan="3"></td></tr>`;
 }
 
 function vfSubOptions(){
@@ -435,7 +476,7 @@ function vouchPagerHtml(total,pages){
 function renderVouchTable(){
   const rows=filteredVouchers();
   const {slice,pages}=vouchPageSlice(rows);
-  document.getElementById('vouchBody').innerHTML=slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>';
+  document.getElementById('vouchBody').innerHTML=slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="10">No vouchers match the filters.</td></tr>';
   document.getElementById('vouchFoot').innerHTML=vouchFootHtml(rows);
   document.getElementById('vouchCount').textContent=vouchCountText(rows);
   document.getElementById('vouchPager').innerHTML=vouchPagerHtml(rows.length,pages);
@@ -447,7 +488,7 @@ function vfSetPer(v){vf.perPage=v==='all'?'all':parseInt(v);vf.page=1;renderVouc
 function applyVoucherFilters(){
   const subSel=document.getElementById('vfSub');
   vf={q:document.getElementById('vfQ').value.trim(),type:document.getElementById('vfType').value,
-      head:document.getElementById('vfHead').value,sub:subSel.value||'All',
+      head:document.getElementById('vfHead').value,sub:subSel.value||'All',status:document.getElementById('vfStatus').value,
       from:document.getElementById('vfFrom').value,to:document.getElementById('vfTo').value,
       page:1,perPage:vf.perPage};
   subSel.innerHTML=vfSubOptions();
@@ -457,7 +498,7 @@ function applyVoucherFilters(){
 }
 
 function clearVoucherFilters(){
-  vf={q:'',type:'All',head:'All',sub:'All',from:'',to:'',page:1,perPage:20};
+  vf={q:'',type:'All',head:'All',sub:'All',status:'All',from:'',to:'',page:1,perPage:20};
   render();
 }
 
@@ -475,6 +516,8 @@ function renderVouchersPage(){
           <option ${vf.type==='All'?'selected':''}>All</option><option ${vf.type==='Payment'?'selected':''}>Payment</option><option ${vf.type==='Receipt'?'selected':''}>Receipt</option></select></div>
         <div style="min-width:140px"><label>Head</label><select id="vfHead" onchange="applyVoucherFilters()"><option value="All">All Heads</option>${headOpts}</select></div>
         <div style="min-width:150px"><label>Sub-Head</label><select id="vfSub" onchange="applyVoucherFilters()">${vfSubOptions()}</select></div>
+        <div style="min-width:110px"><label>Status</label><select id="vfStatus" onchange="applyVoucherFilters()">
+          <option ${vf.status==='All'?'selected':''}>All</option><option value="pending" ${vf.status==='pending'?'selected':''}>Pending</option><option value="partial" ${vf.status==='partial'?'selected':''}>Partial</option><option value="paid" ${vf.status==='paid'?'selected':''}>Paid</option></select></div>
         <div style="min-width:130px"><label>From</label><input type="date" id="vfFrom" value="${vf.from}" onchange="applyVoucherFilters()"></div>
         <div style="min-width:130px"><label>To</label><input type="date" id="vfTo" value="${vf.to}" onchange="applyVoucherFilters()"></div>
         <div style="flex:0;min-width:auto"><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
@@ -486,8 +529,8 @@ function renderVouchersPage(){
         <select id="vfPer" style="width:auto;margin-top:0;padding:5px 8px;font-size:12.5px" onchange="vfSetPer(this.value)">${perOpts}</select> per page</label>
     </div>
     <table class="list-table">
-      <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th>Amount</th><th>By</th><th>Actions</th></tr></thead>
-      <tbody id="vouchBody">${slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>'}</tbody>
+      <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th>Amount</th><th>Status</th><th>By</th><th>Actions</th></tr></thead>
+      <tbody id="vouchBody">${slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="10">No vouchers match the filters.</td></tr>'}</tbody>
       <tfoot id="vouchFoot">${vouchFootHtml(rows)}</tfoot>
     </table>
     <div class="pager" id="vouchPager">${vouchPagerHtml(rows.length,pages)}</div>`);
@@ -512,7 +555,7 @@ function renderMinePage(){
     <table class="list-table">
       <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Amount</th><th></th></tr></thead>
       <tbody>${rows.map(v=>{
-        return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${headLabel(v)}</td><td>${v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>'}</td><td><strong>${money(v.amount)}</strong></td><td><button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> View</button></td></tr>`;
+        return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${headLabel(v)}</td><td>${v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>'} ${vStatusBadge(v)}</td><td><strong>${money(v.amount)}</strong></td><td><button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> View</button></td></tr>`;
       }).join('')||'<tr class="empty-row"><td colspan="6">No entries yet.</td></tr>'}
       ${rows.length?`<tr style="background:#f7f9fc"><td colspan="4" style="text-align:right;font-weight:700;padding:12px 14px">Total</td><td style="font-weight:800;padding:12px 14px">${money(total)}</td><td></td></tr>`:''}</tbody>
     </table>`);
@@ -530,8 +573,10 @@ function voucherForm(id){
       <div id="vTypeShow" style="margin-top:8px;padding:9px 13px;border-radius:7px;font-size:13px;font-weight:600;display:none"></div>
       <div class="row-inline">
         <div><label>Date *</label><input type="date" id="vDate" value="${editing?.date||new Date().toISOString().slice(0,10)}" required></div>
-        <div><label>Amount (PKR) *</label><input type="number" id="vAmount" min="1" value="${editing?.amount||''}" placeholder="0" required></div>
+        <div><label>Total (PKR) *</label><input type="number" id="vTotal" min="1" value="${editing?.total||''}" placeholder="0" required oninput="vTotalSync()"></div>
+        <div><label>Paid (PKR)</label><input type="number" id="vPaid" min="0" value="${editing?editing.paid:''}" placeholder="0" oninput="vPaidDirty=true;vStatusShow()"></div>
       </div>
+      <div id="vStatusShow" style="margin-top:10px"></div>
       <label id="vPartyLabel">Paid To / Received From</label>
       <input id="vParty" value="${editing?.party||''}" placeholder="Person or company name">
       <label>Description / Narration</label>
@@ -547,6 +592,23 @@ function voucherForm(id){
     </form>`);
   vTypeLabel();
   vSubSync(editing?.subHeadId||'');
+  vPaidDirty=!!id;
+  vStatusShow();
+}
+
+let vPaidDirty=false;
+function vTotalSync(){
+  const t=document.getElementById('vTotal'),p=document.getElementById('vPaid');
+  if(!vPaidDirty)p.value=t.value;
+  vStatusShow();
+}
+function vStatusShow(){
+  const el=document.getElementById('vStatusShow');if(!el)return;
+  const t=Number(document.getElementById('vTotal').value||0),p=Number(document.getElementById('vPaid').value||0);
+  if(!t){el.innerHTML='';return;}
+  el.innerHTML=p<=0?'<span class="badge badge-warn"><i class="fa-regular fa-clock"></i> Will be saved as Pending — nothing paid</span>'
+    :p>=t?'<span class="badge badge-income"><i class="fa-solid fa-circle-check"></i> Will be saved as Paid in full</span>'
+    :`<span class="badge badge-neutral"><i class="fa-solid fa-circle-half-stroke"></i> Will be saved as Partial — balance ${money(t-p)}</span>`;
 }
 
 function vSubSync(pre=''){
@@ -576,7 +638,10 @@ async function saveVoucher(e,id){
   const subWrap=document.getElementById('vSubWrap');
   const subHeadId=subWrap&&subWrap.style.display!=='none'?document.getElementById('vSubHead').value:'';
   if(subWrap&&subWrap.style.display!=='none'&&!subHeadId){toast('Select a sub-head.','warn');return;}
-  const data={headId:sel.value,subHeadId,date:document.getElementById('vDate').value,amount:Number(document.getElementById('vAmount').value),
+  const total=Number(document.getElementById('vTotal').value||0),paid=Number(document.getElementById('vPaid').value||0);
+  if(total<=0){toast('Total must be greater than zero.','warn');return;}
+  if(paid>total){toast('Paid amount cannot exceed the total.','warn');return;}
+  const data={headId:sel.value,subHeadId,date:document.getElementById('vDate').value,total,paid,
     party:document.getElementById('vParty').value.trim(),description:document.getElementById('vDesc').value.trim()};
   const file=document.getElementById('vAttach')?.files[0];
   if(file){
@@ -604,7 +669,10 @@ function viewVoucher(id){
       ${row('Head',`${h.name}${h.type?' ('+h.type+')':''}${sub?' → <strong>'+sub.name+'</strong>':''}`)}
       ${row(v.type==='Payment'?'Paid To':'Received From',v.party||'—')}
       ${row('Description',v.description||'—')}
-      ${row('Amount',`<span style="font-size:20px;font-weight:800;color:var(--primary)">${money(v.amount)}</span>`)}
+      ${row('Total',money(v.total))}
+      ${row('Paid',`<span style="font-size:20px;font-weight:800;color:var(--primary)">${money(v.paid)}</span>`)}
+      ${v.total>v.paid?row('Balance',`<span style="font-weight:700;color:#c0392b">${money(v.total-v.paid)}</span>`):''}
+      ${row('Status',vStatusBadge(v))}
       ${row('Created By',v.createdBy||'—')}
       ${v.attachment?row('Attachment',`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank"><i class="fa-solid fa-paperclip"></i> ${v.attachment}</a>`):''}
     </table>
@@ -632,7 +700,10 @@ function openVoucherPrint(id){
       <tr><th style="width:35%">Account Head</th><td>${h.name}${h.type?' ('+h.type+')':''}${(()=>{const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);return sub?` → <strong>${sub.name}</strong>`:'';})()}</td></tr>
       <tr><th>${v.type==='Payment'?'Paid To':'Received From'}</th><td>${v.party||'—'}</td></tr>
       <tr><th>Description</th><td>${v.description||'—'}</td></tr>
-      <tr><th>Amount</th><td style="font-size:22px;font-weight:800;color:var(--primary)">${money(v.amount)}</td></tr>
+      <tr><th>Total</th><td style="font-size:17px;font-weight:700">${money(v.total)}</td></tr>
+      <tr><th>Paid</th><td style="font-size:22px;font-weight:800;color:var(--primary)">${money(v.paid)}</td></tr>
+      ${v.total>v.paid?`<tr><th>Balance</th><td style="font-weight:700;color:#c0392b">${money(v.total-v.paid)}</td></tr>`:''}
+      <tr><th>Status</th><td>${vStatusBadge(v)}</td></tr>
     </table>
     ${v.attachment?(()=>{const isImg=/\.(jpe?g|png|gif|webp)$/i.test(v.attachment);const url=`${API_BASE}vouchers/${v.id}/attachment`;
       return isImg
@@ -763,18 +834,89 @@ function openInvoicePrint(id){
 /* ═══════════════════════════════════════════════════
    SALARY SLIPS
 ═══════════════════════════════════════════════════ */
+let salFilter='all',salQ='',salMonth='',salPage=1,salPer=20;
+
+function filteredSalary(){
+  const q=salQ.toLowerCase();
+  const [fy,fm]=salMonth?salMonth.split('-').map(Number):[0,0];
+  return db.salary.filter(s=>{
+    if(salFilter!=='all'&&s.status!==salFilter)return false;
+    if(salMonth&&(s.year!==fy||s.month!==fm))return false;
+    if(q&&!`${s.employeeName} ${s.designation||''}`.toLowerCase().includes(q))return false;
+    return true;
+  }).sort((a,b)=>(b.year-a.year)||(b.month-a.month));
+}
+
+function salaryRowHtml(s){
+  const mn=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][s.month];
+  const st=s.status==='paid'?'<span class="badge badge-income"><i class="fa-solid fa-circle-check"></i> Paid</span>':'<span class="badge badge-warn"><i class="fa-regular fa-clock"></i> Pending</span>';
+  return `<tr><td><strong>${mn} ${s.year}</strong></td><td>${s.employeeName}</td><td>${money(s.basic)}</td><td style="color:var(--danger)">-${money(s.deduction)}</td><td style="color:var(--success)">+${money(s.bonus)}</td><td><strong style="font-size:15px">${money(s.total)}</strong></td><td>${st}</td>
+  <td style="white-space:nowrap">${s.status!=='paid'?`<button class="link-btn" style="color:var(--success)" onclick="markSlipPaid('${s.id}')" title="Mark as Paid — creates voucher"><i class="fa-solid fa-circle-check"></i></button> `:''}<button class="link-btn" onclick="openSalaryPrint('${s.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="salaryForm('${s.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteSalary('${s.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+}
+
+function salPageSlice(rows){
+  const per=salPer==='all'?Math.max(rows.length,1):salPer;
+  const pages=Math.max(1,Math.ceil(rows.length/per));
+  if(salPage>pages)salPage=pages;
+  return {slice:rows.slice((salPage-1)*per,salPage*per),pages};
+}
+
+function salPagerHtml(total,pages){
+  const nums=[];
+  const windowSet=[...new Set([1,pages,salPage-1,salPage,salPage+1])].filter(n=>n>=1&&n<=pages).sort((a,b)=>a-b);
+  let prev=0;
+  for(const n of windowSet){
+    if(n-prev>1)nums.push('<span class="pg-gap">…</span>');
+    nums.push(`<button class="pg-btn${n===salPage?' active':''}" onclick="salGoPage(${n})">${n}</button>`);
+    prev=n;
+  }
+  return `<button class="pg-btn" ${salPage<=1?'disabled':''} onclick="salGoPage(${salPage-1})"><i class="fa-solid fa-chevron-left"></i></button>${nums.join('')}<button class="pg-btn" ${salPage>=pages?'disabled':''} onclick="salGoPage(${salPage+1})"><i class="fa-solid fa-chevron-right"></i></button><span class="pg-info">Page ${salPage} of ${pages} • ${total} slip${total===1?'':'s'}</span>`;
+}
+
+function renderSalaryTable(){
+  const rows=filteredSalary();
+  const {slice,pages}=salPageSlice(rows);
+  document.getElementById('salBody').innerHTML=slice.map(salaryRowHtml).join('')||`<tr class="empty-row"><td colspan="8">No ${salFilter!=='all'?salFilter+' ':''}salary slips.</td></tr>`;
+  document.getElementById('salPager').innerHTML=salPagerHtml(rows.length,pages);
+}
+
+function applySalaryFilters(){
+  salQ=document.getElementById('salQ').value.trim();
+  salMonth=document.getElementById('salMon').value;
+  salPage=1;
+  renderSalaryTable();
+}
+function salGoPage(n){salPage=n;renderSalaryTable();}
+function salSetPer(v){salPer=v==='all'?'all':parseInt(v);salPage=1;renderSalaryTable();}
+
 function renderSalaryPage(){
-  const sorted=[...db.salary].sort((a,b)=>(b.year-a.year)||(b.month-a.month));
+  const rows=filteredSalary();
+  const {slice,pages}=salPageSlice(rows);
+  const pendCount=db.salary.filter(s=>s.status!=='paid').length;
+  const perOpts=[10,20,50,100].map(n=>`<option value="${n}" ${salPer===n?'selected':''}>${n}</option>`).join('')+`<option value="all" ${salPer==='all'?'selected':''}>All</option>`;
   return shell(`
-    <div class="page-header"><h2><i class="fa-solid fa-money-bill-wave"></i> Salary Slips</h2><button class="btn-primary" onclick="salaryForm()"><i class="fa-solid fa-plus"></i> Generate Slip</button></div>
+    <div class="page-header"><h2><i class="fa-solid fa-money-bill-wave"></i> Salary Slips</h2>
+      <div style="display:flex;gap:10px">
+        <button class="btn-secondary" onclick="generateAllModal()"><i class="fa-solid fa-layer-group"></i> Generate for All</button>
+        <button class="btn-primary" onclick="salaryForm()"><i class="fa-solid fa-plus"></i> Generate Slip</button>
+      </div>
+    </div>
+    <div class="page-title-bar" style="padding:10px 18px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%">
+        ${[['all','All'],['pending','Pending'],['paid','Paid']].map(([v,l])=>`<button class="${salFilter===v?'btn-primary':'btn-secondary'}" style="padding:7px 16px;font-size:13px" onclick="salFilter='${v}';salPage=1;render()">${l}${v==='pending'&&pendCount?` (${pendCount})`:''}</button>`).join('')}
+        <input id="salQ" placeholder="Search employee…" value="${salQ.replace(/"/g,'&quot;')}" style="width:auto;margin-top:0;flex:1;min-width:150px" oninput="applySalaryFilters()">
+        <input type="month" id="salMon" value="${salMonth}" style="width:auto;margin-top:0" onchange="applySalaryFilters()">
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin:0 0 10px 4px">
+      <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#5b6b7d;text-transform:none;letter-spacing:0">Show
+        <select id="salPer" style="width:auto;margin-top:0;padding:5px 8px;font-size:12.5px" onchange="salSetPer(this.value)">${perOpts}</select> per page</label>
+    </div>
     <table class="list-table">
-      <thead><tr><th>Month</th><th>Employee</th><th>Basic</th><th>Deductions</th><th>Bonus</th><th>Net Payable</th><th>Actions</th></tr></thead>
-      <tbody>${sorted.map(s=>{
-        const mn=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][s.month];
-        return `<tr><td><strong>${mn} ${s.year}</strong></td><td>${s.employeeName}</td><td>${money(s.basic)}</td><td style="color:var(--danger)">-${money(s.deduction)}</td><td style="color:var(--success)">+${money(s.bonus)}</td><td><strong style="font-size:15px">${money(s.total)}</strong></td>
-        <td><button class="link-btn" onclick="openSalaryPrint('${s.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="salaryForm('${s.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteSalary('${s.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
-      }).join('')||'<tr class="empty-row"><td colspan="7">No salary slips yet.</td></tr>'}</tbody>
-    </table>`);
+      <thead><tr><th>Month</th><th>Employee</th><th>Basic</th><th>Deductions</th><th>Bonus</th><th>Net Payable</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="salBody">${slice.map(salaryRowHtml).join('')||`<tr class="empty-row"><td colspan="8">No ${salFilter!=='all'?salFilter+' ':''}salary slips.</td></tr>`}</tbody>
+    </table>
+    <div class="pager" id="salPager">${salPagerHtml(rows.length,pages)}</div>`);
 }
 
 function monthOptions(sel){
@@ -782,7 +924,7 @@ function monthOptions(sel){
 }
 
 function salaryForm(id){
-  const s=id?db.salary.find(x=>x.id===id):{employeeId:'',employeeName:'',designation:'',phone:'',month:new Date().getMonth()+1,year:new Date().getFullYear(),basic:0,allowance:0,deduction:0,bonus:0};
+  const s=id?db.salary.find(x=>x.id===id):{employeeId:'',employeeName:'',designation:'',phone:'',month:new Date().getMonth()+1,year:new Date().getFullYear(),basic:0,allowance:0,deduction:0,bonus:0,status:'pending'};
   const empOpts=db.employees.map(e=>`<option value="${e.id}" ${s.employeeId===e.id?'selected':''}>${e.name}${e.designation?' - '+e.designation:''}</option>`).join('');
   showModal(`<div class="modal-header"><h3>${id?'Edit':'Generate'} Salary Slip</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
     <form onsubmit="saveSalary(event,'${id||''}')">
@@ -809,6 +951,11 @@ function salaryForm(id){
         <span style="font-weight:700;color:#555">Net Payable</span>
         <span id="sTotalShow" style="font-size:22px;font-weight:800;color:var(--primary)">${money((s.basic||0)+(s.allowance||0)-(s.deduction||0)+(s.bonus||0))}</span>
       </div>
+      <label>Status</label>
+      <select id="sStatus">
+        <option value="pending" ${s.status!=='paid'?'selected':''}>Pending — no voucher yet</option>
+        <option value="paid" ${s.status==='paid'?'selected':''}>Paid — creates an expense voucher</option>
+      </select>
       <div class="modal-actions">
         <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save & Generate</button>
@@ -818,7 +965,12 @@ function salaryForm(id){
 
 function fillEmpSalary(){
   const emp=db.employees.find(e=>e.id===document.getElementById('sEmp').value);
-  if(emp){document.getElementById('sName').value=emp.name;document.getElementById('sPhone').value=emp.phone||'';document.getElementById('sDesig').value=emp.designation||'';}
+  if(emp){
+    document.getElementById('sName').value=emp.name;document.getElementById('sPhone').value=emp.phone||'';document.getElementById('sDesig').value=emp.designation||'';
+    document.getElementById('sBasic').value=emp.basic||0;document.getElementById('sAllow').value=emp.allowance||0;
+    document.getElementById('sDeduct').value=emp.deduction||0;document.getElementById('sBonus').value=emp.bonus||0;
+    calcSalTotal();
+  }
 }
 function calcSalTotal(){
   const b=Number(document.getElementById('sBasic').value||0);
@@ -834,16 +986,49 @@ async function saveSalary(e,id){
     designation:document.getElementById('sDesig').value.trim(),phone:document.getElementById('sPhone').value.trim(),
     month:Number(document.getElementById('sMonth').value),year:Number(document.getElementById('sYear').value),
     basic:Number(document.getElementById('sBasic').value||0),allowance:Number(document.getElementById('sAllow').value||0),
-    deduction:Number(document.getElementById('sDeduct').value||0),bonus:Number(document.getElementById('sBonus').value||0)};
+    deduction:Number(document.getElementById('sDeduct').value||0),bonus:Number(document.getElementById('sBonus').value||0),
+    status:document.getElementById('sStatus').value};
   const r=await api('salary'+(id?'/'+id:''),id?'PUT':'POST',data);
   if(!r)return;
   await loadState();closeModal();toast('Salary slip saved!');
   openSalaryPrint(id||r.slip.id);
 }
 
+async function markSlipPaid(id){
+  const s=db.salary.find(x=>x.id===id);
+  if(!confirm(`Mark ${s.employeeName}'s ${['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][s.month]} ${s.year} slip as PAID? An expense voucher (${money(s.total)}) will be created.`))return;
+  if(!await api(`salary/${id}/paid`,'POST'))return;
+  await loadState();render();toast('Marked paid — voucher created.');
+}
+
+function generateAllModal(){
+  const now=new Date();
+  showModal(`<div class="modal-header"><h3>Generate Slips for All Employees</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
+    <p style="font-size:13px;color:#8896a6;margin-bottom:4px">Creates a <strong>pending</strong> slip for every employee using their salary defaults. Employees who already have a slip for that month are skipped.</p>
+    <form onsubmit="generateAllSalaries(event)">
+      <div class="row-inline">
+        <div><label>Month</label><select id="gMonth">${monthOptions(now.getMonth()+1)}</select></div>
+        <div><label>Year</label><input type="number" id="gYear" value="${now.getFullYear()}" min="2000" max="2100"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn-primary"><i class="fa-solid fa-layer-group"></i> Generate</button>
+      </div>
+    </form>`);
+}
+
+async function generateAllSalaries(e){
+  e.preventDefault();
+  const r=await api('salary/generate','POST',{month:Number(document.getElementById('gMonth').value),year:Number(document.getElementById('gYear').value)});
+  if(!r)return;
+  await loadState();closeModal();render();
+  toast(r.created?`${r.created} slip${r.created===1?'':'s'} created.`:'Nothing to create — all employees already have slips for that month.',r.created?'success':'warn');
+}
+
 async function deleteSalary(id){
   const s=db.salary.find(x=>x.id===id);
-  if(!confirm(`Delete slip for ${s.employeeName}?`))return;
+  const warn=s.status==='paid'?' The linked expense voucher will also be deleted.':'';
+  if(!confirm(`Delete slip for ${s.employeeName}?${warn}`))return;
   if(!await api('salary/'+id,'DELETE'))return;
   await loadState();render();toast('Slip deleted.','warn');
 }
@@ -1047,7 +1232,7 @@ function generateReport(){
 
 function exportExcel(){
   if(!currentReportRows.length){toast('Generate a report first.','warn');return;}
-  const data=currentReportRows.map(v=>{const h=db.heads.find(x=>x.id===v.headId)||{name:'',group:''};const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);return{Date:v.date,VoucherNo:v.no,Head:h.name,SubHead:sub?.name||'',Group:h.group||'',Type:v.type,Party:v.party||'',Description:v.description||'',Amount:v.amount,CreatedBy:v.createdBy};});
+  const data=currentReportRows.map(v=>{const h=db.heads.find(x=>x.id===v.headId)||{name:'',group:''};const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);return{Date:v.date,VoucherNo:v.no,Head:h.name,SubHead:sub?.name||'',Group:h.group||'',Type:v.type,Party:v.party||'',Description:v.description||'',Total:v.total,Paid:v.paid,Balance:v.total-v.paid,Status:v.status,CreatedBy:v.createdBy};});
   const ws=XLSX.utils.json_to_sheet(data);
   ws['!cols']=[{wch:12},{wch:18},{wch:22},{wch:18},{wch:14},{wch:12},{wch:20},{wch:30},{wch:14},{wch:18}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Report');
