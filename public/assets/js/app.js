@@ -923,8 +923,25 @@ function monthOptions(sel){
   return ['January','February','March','April','May','June','July','August','September','October','November','December'].map((n,i)=>`<option value="${i+1}" ${sel==i+1?'selected':''}>${n}</option>`).join('');
 }
 
+const SALARY_HEAD='aaebc5788557b160';
+function expHeadOptions(sel){
+  return db.heads.filter(h=>h.type==='Expense').map(h=>`<option value="${h.id}" ${h.id===sel?'selected':''}>${h.name}</option>`).join('');
+}
+function subOptions(headId,sel){
+  return `<option value="">— No sub-head —</option>`+(db.subHeads||[]).filter(s=>s.headId===headId)
+    .map(s=>`<option value="${s.id}" ${s.id===sel?'selected':''}>${s.name}</option>`).join('');
+}
+function fillSubs(headElId,subElId,sel){
+  const h=document.getElementById(headElId),s=document.getElementById(subElId);
+  if(h&&s)s.innerHTML=subOptions(h.value,sel||'');
+}
+function defaultSalHead(){const heads=db.heads.filter(h=>h.type==='Expense');return heads.find(h=>h.id===SALARY_HEAD)?SALARY_HEAD:(heads[0]?.id||'');}
+
 function salaryForm(id){
   const s=id?db.salary.find(x=>x.id===id):{employeeId:'',employeeName:'',designation:'',phone:'',month:new Date().getMonth()+1,year:new Date().getFullYear(),basic:0,allowance:0,deduction:0,bonus:0,status:'pending'};
+  const pv=s.voucherId?db.vouchers.find(v=>v.id===s.voucherId):null;
+  const selHead=pv?.headId||defaultSalHead();
+  const selSub=pv?.subHeadId||'';
   const empOpts=db.employees.map(e=>`<option value="${e.id}" ${s.employeeId===e.id?'selected':''}>${e.name}${e.designation?' - '+e.designation:''}</option>`).join('');
   showModal(`<div class="modal-header"><h3>${id?'Edit':'Generate'} Salary Slip</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
     <form onsubmit="saveSalary(event,'${id||''}')">
@@ -952,10 +969,16 @@ function salaryForm(id){
         <span id="sTotalShow" style="font-size:22px;font-weight:800;color:var(--primary)">${money((s.basic||0)+(s.allowance||0)-(s.deduction||0)+(s.bonus||0))}</span>
       </div>
       <label>Status</label>
-      <select id="sStatus">
+      <select id="sStatus" onchange="document.getElementById('sHeadWrap').style.display=this.value==='paid'?'block':'none'">
         <option value="pending" ${s.status!=='paid'?'selected':''}>Pending — no voucher yet</option>
         <option value="paid" ${s.status==='paid'?'selected':''}>Paid — creates an expense voucher</option>
       </select>
+      <div id="sHeadWrap" style="display:${s.status==='paid'?'block':'none'}">
+        <div class="row-inline">
+          <div><label>Expense Head *</label><select id="sHead" onchange="fillSubs('sHead','sSub')">${expHeadOptions(selHead)}</select></div>
+          <div><label>Sub-Head</label><select id="sSub">${subOptions(selHead,selSub)}</select></div>
+        </div>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save & Generate</button>
@@ -987,18 +1010,33 @@ async function saveSalary(e,id){
     month:Number(document.getElementById('sMonth').value),year:Number(document.getElementById('sYear').value),
     basic:Number(document.getElementById('sBasic').value||0),allowance:Number(document.getElementById('sAllow').value||0),
     deduction:Number(document.getElementById('sDeduct').value||0),bonus:Number(document.getElementById('sBonus').value||0),
-    status:document.getElementById('sStatus').value};
+    status:document.getElementById('sStatus').value,
+    headId:document.getElementById('sHead')?.value||'',subHeadId:document.getElementById('sSub')?.value||''};
   const r=await api('salary'+(id?'/'+id:''),id?'PUT':'POST',data);
   if(!r)return;
   await loadState();closeModal();toast('Salary slip saved!');
   openSalaryPrint(id||r.slip.id);
 }
 
-async function markSlipPaid(id){
-  const s=db.salary.find(x=>x.id===id);
-  if(!confirm(`Mark ${s.employeeName}'s ${['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][s.month]} ${s.year} slip as PAID? An expense voucher (${money(s.total)}) will be created.`))return;
-  if(!await api(`salary/${id}/paid`,'POST'))return;
-  await loadState();render();toast('Marked paid — voucher created.');
+function markSlipPaid(id){
+  const s=db.salary.find(x=>x.id===id);if(!s)return;
+  const head=defaultSalHead();
+  const mn=['','January','February','March','April','May','June','July','August','September','October','November','December'][s.month];
+  showModal(`<div class="modal-header"><h3><i class="fa-solid fa-circle-check"></i> Pay Salary Slip</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
+    <p style="font-size:13px;color:#8896a6;margin-bottom:10px">${s.employeeName} — ${mn} ${s.year} — a payment voucher for <strong>${money(s.total)}</strong> will be created.</p>
+    <label>Expense Head *</label>
+    <select id="pHead" onchange="fillSubs('pHead','pSub')">${expHeadOptions(head)}</select>
+    <label>Sub-Head</label>
+    <select id="pSub">${subOptions(head,'')}</select>
+    <div class="modal-actions">
+      <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+      <button type="button" class="btn-primary" onclick="confirmSlipPaid('${id}')"><i class="fa-solid fa-circle-check"></i> Mark Paid</button>
+    </div>`);
+}
+async function confirmSlipPaid(id){
+  const r=await api(`salary/${id}/paid`,'POST',{headId:document.getElementById('pHead').value,subHeadId:document.getElementById('pSub').value});
+  if(!r)return;
+  await loadState();closeModal();render();toast('Marked paid — voucher created.');
 }
 
 function generateAllModal(){
