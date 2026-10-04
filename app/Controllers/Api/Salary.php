@@ -7,6 +7,7 @@ use App\Models\HeadModel;
 use App\Models\SalarySlipModel;
 use App\Models\SubHeadModel;
 use App\Models\VoucherModel;
+use App\Models\VoucherPaymentModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class Salary extends BaseApiController
@@ -231,6 +232,15 @@ class Salary extends BaseApiController
             'attachment'  => '',
             'created_by'  => $this->user()['name'] ?? 'Admin',
             'created_at'  => $this->now(),
+        ]);
+        (new VoucherPaymentModel())->insert([
+            'id'         => $this->newId(),
+            'voucher_id' => $id,
+            'amount'     => $total,
+            'pay_date'   => $date,
+            'note'       => 'Salary payment',
+            'created_by' => $this->user()['name'] ?? 'Admin',
+            'created_at' => $this->now(),
         ]);
         return $id;
     }

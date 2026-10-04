@@ -11,12 +11,13 @@ use App\Models\SettingModel;
 use App\Models\SubHeadModel;
 use App\Models\UserModel;
 use App\Models\VoucherModel;
+use App\Models\VoucherPaymentModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class Backup extends BaseApiController
 {
     private const TABLES = [
-        'employee_heads', 'invoice_items', 'vouchers', 'sub_heads',
+        'employee_heads', 'invoice_items', 'vouchers', 'voucher_payments', 'sub_heads',
         'invoices', 'salary_slips', 'users', 'employees', 'heads', 'settings',
     ];
 
@@ -33,6 +34,7 @@ class Backup extends BaseApiController
             'heads'     => (new HeadModel())->allMapped(),
             'subHeads'  => (new SubHeadModel())->allMapped(),
             'vouchers'  => (new VoucherModel())->allMapped(),
+            'voucherPayments' => (new VoucherPaymentModel())->allMapped(),
             'invoices'  => (new InvoiceModel())->allMapped(),
             'salary'    => (new SalarySlipModel())->allMapped(),
         ]);
@@ -56,6 +58,7 @@ class Backup extends BaseApiController
         $this->importEmployees((array) ($b['employees'] ?? []));
         $this->importUsers((array) ($b['users'] ?? []), $b);
         $this->importVouchers((array) ($b['vouchers'] ?? []));
+        $this->importVoucherPayments((array) ($b['voucherPayments'] ?? []));
         $this->importInvoices((array) ($b['invoices'] ?? []));
         $this->importSalary((array) ($b['salary'] ?? []));
         $db->transComplete();
@@ -226,6 +229,22 @@ class Backup extends BaseApiController
                 'description' => (string) ($v['description'] ?? ''),
                 'created_by'  => (string) ($v['createdBy'] ?? ''),
                 'created_at'  => $this->now(),
+            ]);
+        }
+    }
+
+    private function importVoucherPayments(array $rows): void
+    {
+        $m = new VoucherPaymentModel();
+        foreach ($rows as $p) {
+            $m->insert([
+                'id'         => (string) ($p['id'] ?? $this->newId()),
+                'voucher_id' => (string) ($p['voucherId'] ?? ''),
+                'amount'     => (float) ($p['amount'] ?? 0),
+                'pay_date'   => $this->validDate($p['date'] ?? ''),
+                'note'       => (string) ($p['note'] ?? ''),
+                'created_by' => (string) ($p['createdBy'] ?? ''),
+                'created_at' => $this->now(),
             ]);
         }
     }

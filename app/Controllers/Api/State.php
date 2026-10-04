@@ -9,6 +9,7 @@ use App\Models\SalarySlipModel;
 use App\Models\SettingModel;
 use App\Models\SubHeadModel;
 use App\Models\VoucherModel;
+use App\Models\VoucherPaymentModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class State extends BaseApiController
@@ -31,6 +32,7 @@ class State extends BaseApiController
                 'heads'     => $heads->allMapped(),
                 'subHeads'  => (new SubHeadModel())->allMapped(),
                 'vouchers'  => $vouchers->allMapped(),
+                'voucherPayments' => (new VoucherPaymentModel())->allMapped(),
                 'employees' => $employees->allMapped(),
                 'invoices'  => (new InvoiceModel())->allMapped(),
                 'salary'    => (new SalarySlipModel())->allMapped(),
@@ -53,6 +55,17 @@ class State extends BaseApiController
             'vouchers'  => array_values(array_filter(
                 $vouchers->allMapped(),
                 fn ($v) => $v['createdBy'] === $user['name']
+            )),
+            'voucherPayments' => array_values(array_filter(
+                (new VoucherPaymentModel())->allMapped(),
+                fn ($p) => in_array(
+                    $p['voucherId'],
+                    array_column(array_filter(
+                        $vouchers->allMapped(),
+                        fn ($v) => $v['createdBy'] === $user['name']
+                    ), 'id'),
+                    true
+                )
             )),
             'employees' => $emp ? [$employees->map($emp)] : [],
             'invoices'  => [],

@@ -94,9 +94,12 @@ button{cursor:pointer;transition:all .18s;font-family:inherit;}
 .doc-table{width:100%;border-collapse:collapse;margin-top:15px;}
 .doc-table th,.doc-table td{border:1px solid #dfe5ec;padding:11px 14px;text-align:left;font-size:14px;}
 .doc-table th{background:#f5f8fb;font-weight:700;}
+.doc-table.compact th,.doc-table.compact td{padding:7px 12px;font-size:13px;}
 .sign-row{display:flex;justify-content:space-between;margin-top:60px;font-size:13px;color:#555;}
+.sign-row.compact{margin-top:30px;font-size:12px;}
 .sign-row div{text-align:center;}
 .sign-row span{display:block;margin-top:40px;border-top:1px solid #aaa;padding-top:6px;}
+.sign-row.compact span{margin-top:20px;padding-top:5px;}
 .print-bar{display:flex;gap:10px;justify-content:center;align-items:center;padding:14px;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.08);}
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(900px 500px at 80% -10%,rgba(224,149,46,.22),transparent 60%),radial-gradient(700px 500px at 10% 110%,rgba(42,82,190,.28),transparent 60%),linear-gradient(135deg,#0b2e4f,#0a1830);}

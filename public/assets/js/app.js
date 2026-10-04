@@ -39,7 +39,7 @@ let db={settings:defaultSettings(),employees:[],heads:[],vouchers:[],invoices:[]
 let session=null;
 let route='login';
 let printReturnRoute=null;
-let printContent='',printFilename='';
+let printContent='',printFilename='',autoPdf=false;
 let tempInvoiceItems=[];
 let currentReportRows=[];
 let reportMeta={from:'',to:''};
@@ -74,7 +74,6 @@ function toast(msg,type='success'){
 /* ── MODAL ── */
 function showModal(html){document.getElementById('modalBox').innerHTML=html;document.getElementById('modalOverlay').classList.remove('hidden');}
 function closeModal(){document.getElementById('modalOverlay').classList.add('hidden');document.getElementById('modalBox').innerHTML='';}
-document.getElementById('modalOverlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
 
 /* ── DOC HEADER ── */
 function docHeader(sub=''){
@@ -431,7 +430,7 @@ function vStatusBadge(v){
 function voucherRowHtml(v){
   const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
   return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${headLabel(v)}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td style="white-space:nowrap"><strong>${money(v.amount)}</strong>${v.total>v.amount?`<div style="font-size:11px;color:#8896a6">of ${money(v.total)}</div>`:''}</td><td>${vStatusBadge(v)}</td><td style="color:#888;font-size:12px">${v.createdBy}</td>
-  <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="viewVoucher('${v.id}')" title="View"><i class="fa-solid fa-eye"></i></button> <button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+  <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="viewVoucher('${v.id}')" title="View"><i class="fa-solid fa-eye"></i></button> <button class="link-btn" onclick="payVoucherModal('${v.id}')" title="Payments"><i class="fa-solid fa-coins"></i></button> <button class="link-btn" onclick="openVoucherPrint('${v.id}')" title="Print view"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="downloadVoucherPdf('${v.id}')" title="Download PDF"><i class="fa-solid fa-file-arrow-down"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
 }
 
 function vouchCountText(rows){
@@ -520,7 +519,7 @@ function renderVouchersPage(){
           <option ${vf.status==='All'?'selected':''}>All</option><option value="pending" ${vf.status==='pending'?'selected':''}>Pending</option><option value="partial" ${vf.status==='partial'?'selected':''}>Partial</option><option value="paid" ${vf.status==='paid'?'selected':''}>Paid</option></select></div>
         <div style="min-width:130px"><label>From</label><input type="date" id="vfFrom" value="${vf.from}" onchange="applyVoucherFilters()"></div>
         <div style="min-width:130px"><label>To</label><input type="date" id="vfTo" value="${vf.to}" onchange="applyVoucherFilters()"></div>
-        <div style="flex:0;min-width:auto"><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
+        <div style="flex:0;min-width:auto;display:flex;gap:8px"><button class="btn-secondary" onclick="exportVoucherCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px 4px">
@@ -574,7 +573,9 @@ function voucherForm(id){
       <div class="row-inline">
         <div><label>Date *</label><input type="date" id="vDate" value="${editing?.date||new Date().toISOString().slice(0,10)}" required></div>
         <div><label>Total (PKR) *</label><input type="number" id="vTotal" min="1" value="${editing?.total||''}" placeholder="0" required oninput="vTotalSync()"></div>
-        <div><label>Paid (PKR)</label><input type="number" id="vPaid" min="0" value="${editing?editing.paid:''}" placeholder="0" oninput="vPaidDirty=true;vStatusShow()"></div>
+        ${editing
+          ?`<div><label>Paid — via payment entries</label><input disabled value="${money(editing.paid)} (${editing.status})"></div>`
+          :`<div><label>Paid (PKR)</label><input type="number" id="vPaid" min="0" placeholder="0" oninput="vPaidDirty=true;vStatusShow()"></div>`}
       </div>
       <div id="vStatusShow" style="margin-top:10px"></div>
       <label id="vPartyLabel">Paid To / Received From</label>
@@ -599,13 +600,14 @@ function voucherForm(id){
 let vPaidDirty=false;
 function vTotalSync(){
   const t=document.getElementById('vTotal'),p=document.getElementById('vPaid');
-  if(!vPaidDirty)p.value=t.value;
+  if(p&&!vPaidDirty)p.value=t.value;
   vStatusShow();
 }
 function vStatusShow(){
   const el=document.getElementById('vStatusShow');if(!el)return;
-  const t=Number(document.getElementById('vTotal').value||0),p=Number(document.getElementById('vPaid').value||0);
-  if(!t){el.innerHTML='';return;}
+  const pEl=document.getElementById('vPaid');
+  const t=Number(document.getElementById('vTotal').value||0),p=pEl?Number(pEl.value||0):0;
+  if(!t||!pEl){el.innerHTML='';return;}
   el.innerHTML=p<=0?'<span class="badge badge-warn"><i class="fa-regular fa-clock"></i> Will be saved as Pending — nothing paid</span>'
     :p>=t?'<span class="badge badge-income"><i class="fa-solid fa-circle-check"></i> Will be saved as Paid in full</span>'
     :`<span class="badge badge-neutral"><i class="fa-solid fa-circle-half-stroke"></i> Will be saved as Partial — balance ${money(t-p)}</span>`;
@@ -638,10 +640,11 @@ async function saveVoucher(e,id){
   const subWrap=document.getElementById('vSubWrap');
   const subHeadId=subWrap&&subWrap.style.display!=='none'?document.getElementById('vSubHead').value:'';
   if(subWrap&&subWrap.style.display!=='none'&&!subHeadId){toast('Select a sub-head.','warn');return;}
-  const total=Number(document.getElementById('vTotal').value||0),paid=Number(document.getElementById('vPaid').value||0);
+  const total=Number(document.getElementById('vTotal').value||0);
+  const paidEl=document.getElementById('vPaid');
   if(total<=0){toast('Total must be greater than zero.','warn');return;}
-  if(paid>total){toast('Paid amount cannot exceed the total.','warn');return;}
-  const data={headId:sel.value,subHeadId,date:document.getElementById('vDate').value,total,paid,
+  if(paidEl&&Number(paidEl.value||0)>total){toast('Paid amount cannot exceed the total.','warn');return;}
+  const data={headId:sel.value,subHeadId,date:document.getElementById('vDate').value,total,paid:paidEl?Number(paidEl.value||0):undefined,
     party:document.getElementById('vParty').value.trim(),description:document.getElementById('vDesc').value.trim()};
   const file=document.getElementById('vAttach')?.files[0];
   if(file){
@@ -677,9 +680,65 @@ function viewVoucher(id){
       ${v.attachment?row('Attachment',`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank"><i class="fa-solid fa-paperclip"></i> ${v.attachment}</a>`):''}
     </table>
     <div class="modal-actions">
+      <button type="button" class="btn-secondary" onclick="closeModal();payVoucherModal('${v.id}')"><i class="fa-solid fa-coins"></i> Payments</button>
       <button type="button" class="btn-secondary" onclick="closeModal();voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
       <button type="button" class="btn-primary" onclick="closeModal();openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> Print / PDF</button>
     </div>`);
+}
+
+function voucherPays(id){
+  return (db.voucherPayments||[]).filter(p=>p.voucherId===id).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+
+function payVoucherModal(id){
+  const v=db.vouchers.find(x=>x.id===id);if(!v)return;
+  const pays=voucherPays(id);
+  const bal=Math.max(0,v.total-v.paid);
+  const canDel=session.role==='admin';
+  const chip=(l,val,color)=>`<div style="flex:1;text-align:center;padding:10px;background:#f5f8fb;border-radius:8px;border:1px solid var(--border)">
+    <div style="font-size:10.5px;font-weight:700;color:#8896a6;text-transform:uppercase;letter-spacing:.6px">${l}</div>
+    <div style="font-size:17px;font-weight:800;color:${color};margin-top:3px">${val}</div></div>`;
+  showModal(`<div class="modal-header"><h3><i class="fa-solid fa-coins"></i> Payments — ${v.no}</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
+    <p style="font-size:13px;color:#8896a6;margin-bottom:10px">${v.party||'—'} • ${headLabel(v)}</p>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      ${chip('Total',money(v.total),'var(--primary)')}
+      ${chip('Paid',money(v.paid),'var(--success)')}
+      ${chip('Balance',money(bal),bal>0?'var(--danger)':'var(--success)')}
+    </div>
+    <label style="margin-top:0">Payment History</label>
+    ${pays.length?`<table class="doc-table" style="margin-top:4px">
+      <thead><tr><th>Date</th><th>Amount</th><th>Note</th><th>By</th><th></th></tr></thead>
+      <tbody>${pays.map(p=>`<tr><td style="white-space:nowrap">${dateStr(p.date)}</td><td style="font-weight:700;white-space:nowrap">${money(p.amount)}</td><td style="font-size:13px;color:#666">${p.note||'—'}</td><td style="font-size:12px;color:#8896a6">${p.createdBy||'—'}</td>
+        <td>${canDel?`<button class="link-btn danger" onclick="deleteVoucherPayment('${p.id}','${v.id}')" title="Delete payment"><i class="fa-solid fa-trash"></i></button>`:''}</td></tr>`).join('')}
+      </tbody></table>`
+      :'<p style="font-size:13px;color:#8896a6;padding:10px 0">No payments recorded yet.</p>'}
+    ${bal>0?`<form onsubmit="addVoucherPayment(event,'${v.id}')" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div class="row-inline">
+        <div><label>Amount *</label><input type="number" id="vpAmt" min="1" max="${bal}" value="${bal}" required></div>
+        <div><label>Date</label><input type="date" id="vpDate" value="${new Date().toISOString().slice(0,10)}"></div>
+      </div>
+      <label>Note</label><input id="vpNote" placeholder="e.g. Cash installment, bank transfer ref…">
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeModal()">Close</button>
+        <button type="submit" class="btn-primary"><i class="fa-solid fa-plus"></i> Record Payment</button>
+      </div></form>`
+      :`<div class="modal-actions"><span style="margin-right:auto;font-size:13px;color:var(--success);font-weight:700"><i class="fa-solid fa-circle-check"></i> Paid in full</span><button type="button" class="btn-secondary" onclick="closeModal()">Close</button></div>`}`);
+}
+
+async function addVoucherPayment(e,id){
+  e.preventDefault();
+  const r=await api(`vouchers/${id}/payments`,'POST',{
+    amount:Number(document.getElementById('vpAmt').value||0),
+    date:document.getElementById('vpDate').value,
+    note:document.getElementById('vpNote').value.trim()});
+  if(!r)return;
+  await loadState();payVoucherModal(id);toast('Payment recorded.');
+}
+
+async function deleteVoucherPayment(pid,vid){
+  if(!confirm('Delete this payment entry? The voucher paid amount will be recalculated.'))return;
+  if(!await api(`vouchers/payments/${pid}`,'DELETE'))return;
+  await loadState();payVoucherModal(vid);toast('Payment deleted.','warn');
 }
 
 async function deleteVoucher(id){
@@ -717,7 +776,10 @@ function openVoucherPrint(id){
     <p style="text-align:center;font-size:11px;color:#bbb;margin-top:30px">Generated by ${db.settings.companyName} ERP • ${new Date().toLocaleString()}</p>
   </div>`;
   printReturnRoute=route;route='print';render();
+  if(autoPdf){autoPdf=false;setTimeout(()=>downloadPDF('docArea',`${printFilename.replace(/'/g,'')}.pdf`),350);}
 }
+
+function downloadVoucherPdf(id){autoPdf=true;openVoucherPrint(id);}
 
 /* ═══════════════════════════════════════════════════
    INVOICES
@@ -851,7 +913,7 @@ function salaryRowHtml(s){
   const mn=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][s.month];
   const st=s.status==='paid'?'<span class="badge badge-income"><i class="fa-solid fa-circle-check"></i> Paid</span>':'<span class="badge badge-warn"><i class="fa-regular fa-clock"></i> Pending</span>';
   return `<tr><td><strong>${mn} ${s.year}</strong></td><td>${s.employeeName}</td><td>${money(s.basic)}</td><td style="color:var(--danger)">-${money(s.deduction)}</td><td style="color:var(--success)">+${money(s.bonus)}</td><td><strong style="font-size:15px">${money(s.total)}</strong></td><td>${st}</td>
-  <td style="white-space:nowrap">${s.status!=='paid'?`<button class="link-btn" style="color:var(--success)" onclick="markSlipPaid('${s.id}')" title="Mark as Paid — creates voucher"><i class="fa-solid fa-circle-check"></i></button> `:''}<button class="link-btn" onclick="openSalaryPrint('${s.id}')"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="salaryForm('${s.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteSalary('${s.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+  <td style="white-space:nowrap">${s.status!=='paid'?`<button class="link-btn" style="color:var(--success)" onclick="markSlipPaid('${s.id}')" title="Mark as Paid — creates voucher"><i class="fa-solid fa-circle-check"></i></button> `:''}<button class="link-btn" onclick="openSalaryPrint('${s.id}')" title="Print view"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="downloadSlipPdf('${s.id}')" title="Download PDF"><i class="fa-solid fa-file-arrow-down"></i></button> <button class="link-btn" onclick="salaryForm('${s.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteSalary('${s.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
 }
 
 function salPageSlice(rows){
@@ -906,6 +968,7 @@ function renderSalaryPage(){
         ${[['all','All'],['pending','Pending'],['paid','Paid']].map(([v,l])=>`<button class="${salFilter===v?'btn-primary':'btn-secondary'}" style="padding:7px 16px;font-size:13px" onclick="salFilter='${v}';salPage=1;render()">${l}${v==='pending'&&pendCount?` (${pendCount})`:''}</button>`).join('')}
         <input id="salQ" placeholder="Search employee…" value="${salQ.replace(/"/g,'&quot;')}" style="width:auto;margin-top:0;flex:1;min-width:150px" oninput="applySalaryFilters()">
         <input type="month" id="salMon" value="${salMonth}" style="width:auto;margin-top:0" onchange="applySalaryFilters()">
+        <button class="btn-secondary" style="padding:8px 14px;font-size:13px" onclick="exportSalaryCsv()" title="Download filtered slips as CSV"><i class="fa-solid fa-file-csv"></i> CSV</button>
       </div>
     </div>
     <div style="display:flex;justify-content:flex-end;margin:0 0 10px 4px">
@@ -1076,15 +1139,15 @@ function openSalaryPrint(id){
   const mn=['','January','February','March','April','May','June','July','August','September','October','November','December'][s.month];
   printFilename=`Salary-${s.employeeName}-${mn}-${s.year}`;
   const waMsg=encodeURIComponent(`Dear ${s.employeeName},\n\nSalary Slip — ${mn} ${s.year}\nBasic: ${money(s.basic)}\nAllowances: ${money(s.allowance||0)}\nDeductions: -${money(s.deduction)}\nBonus: +${money(s.bonus)}\nNet Payable: ${money(s.total)}\n\n— ${db.settings.companyName}`);
-  printContent=`<div id="docArea" class="doc">${docHeader()}
-    <h2 style="text-align:center;margin:18px 0;color:var(--primary)">SALARY SLIP</h2>
-    <h3 style="text-align:center;color:#666;margin-bottom:20px;font-weight:400">${mn} ${s.year}</h3>
-    <table class="doc-table">
-      <tr><th style="width:35%">Employee Name</th><td><strong>${s.employeeName}</strong></td></tr>
-      ${s.designation?`<tr><th>Designation</th><td>${s.designation}</td></tr>`:''}
-      <tr><th>Pay Period</th><td>${mn} ${s.year}</td></tr>
+  printContent=`<div id="docArea" class="doc" style="padding:34px 42px">${docHeader()}
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin:12px 0 14px">
+      <h2 style="color:var(--primary);letter-spacing:2px">SALARY SLIP</h2>
+      <span style="font-size:15px;font-weight:700;color:#666">${mn} ${s.year}</span>
+    </div>
+    <table class="doc-table compact" style="margin-top:0">
+      <tr><th style="width:20%">Employee</th><td style="width:40%"><strong>${s.employeeName}</strong></td><th style="width:18%">Designation</th><td>${s.designation||'—'}</td></tr>
     </table>
-    <table class="doc-table" style="margin-top:16px">
+    <table class="doc-table compact" style="margin-top:10px">
       <thead><tr><th>Earnings</th><th>Amount</th><th>Deductions</th><th>Amount</th></tr></thead>
       <tbody>
         <tr><td>Basic Salary</td><td>${money(s.basic)}</td><td>Deductions</td><td>${money(s.deduction)}</td></tr>
@@ -1092,10 +1155,11 @@ function openSalaryPrint(id){
         <tr><td>Bonus</td><td>${money(s.bonus)}</td><td>&nbsp;</td><td>&nbsp;</td></tr>
       </tbody>
     </table>
-    <div style="text-align:right;margin-top:14px;padding:14px;background:var(--primary);color:#fff;border-radius:8px">
-      NET PAYABLE &nbsp;<span style="font-size:24px;font-weight:800">${money(s.total)}</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 16px;background:var(--primary);color:#fff;border-radius:8px">
+      <span style="font-size:12px;font-weight:700;letter-spacing:1px">NET PAYABLE</span>
+      <span style="font-size:20px;font-weight:800">${money(s.total)}</span>
     </div>
-    <div class="sign-row">
+    <div class="sign-row compact">
       <div><span>Employee Signature</span>&nbsp;</div>
       <div><span>HR / Accounts</span>&nbsp;</div>
       <div><span>Authorized By</span>&nbsp;</div>
@@ -1107,7 +1171,10 @@ function openSalaryPrint(id){
     </div>`:''}
   </div>`;
   printReturnRoute=route;route='print';render();
+  if(autoPdf){autoPdf=false;setTimeout(()=>downloadPDF('docArea',`${printFilename.replace(/'/g,'')}.pdf`),350);}
 }
+
+function downloadSlipPdf(id){autoPdf=true;openSalaryPrint(id);}
 
 /* ═══════════════════════════════════════════════════
    REPORTS
@@ -1411,6 +1478,8 @@ async function downloadPDF(elId,filename){
   const el=document.getElementById(elId);
   if(!el){toast('Nothing to export.','warn');return;}
   toast('Generating PDF...');
+  const noprint=[...el.querySelectorAll('.noprint')].map(n=>[n,n.style.display]);
+  noprint.forEach(([n])=>n.style.display='none');
   try{
     const scale=2;
     const canvas=await html2canvas(el,{scale,useCORS:true,logging:false,backgroundColor:'#fff'});
@@ -1449,6 +1518,45 @@ async function downloadPDF(elId,filename){
     pdf.save(filename||'Document.pdf');
     toast('PDF downloaded!');
   }catch(err){toast('PDF failed — use Print button instead.','error');console.error(err);}
+  finally{noprint.forEach(([n,d])=>n.style.display=d);}
+}
+
+/* ═══════════════════════════════════════════════════
+   CSV EXPORT
+═══════════════════════════════════════════════════ */
+function csvDownload(filename,rows){
+  if(!rows.length){toast('Nothing to export.','warn');return;}
+  const keys=Object.keys(rows[0]);
+  const esc=v=>{v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  const csv='﻿'+[keys.map(esc).join(','),...rows.map(r=>keys.map(k=>esc(r[k])).join(','))].join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=filename;a.click();URL.revokeObjectURL(a.href);
+  toast('CSV downloaded!');
+}
+
+function exportVoucherCsv(){
+  const rows=filteredVouchers().map(v=>{
+    const h=db.heads.find(x=>x.id===v.headId)||{};
+    const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);
+    return{Date:v.date,No:v.no,Head:h.name||'',SubHead:sub?.name||'',Type:v.type,
+      Party:v.party||'',Description:v.description||'',Total:v.total,Paid:v.paid,
+      Balance:v.total-v.paid,Status:v.status,CreatedBy:v.createdBy||''};
+  });
+  const paid=rows.reduce((s,r)=>s+r.Paid,0),total=rows.reduce((s,r)=>s+r.Total,0);
+  rows.push({Date:'',No:'',Head:'TOTAL',SubHead:'',Type:'',Party:'',Description:'',Total:total,Paid:paid,Balance:total-paid,Status:'',CreatedBy:''});
+  csvDownload(`vouchers-${vf.from||'all'}-to-${vf.to||'now'}.csv`,rows);
+}
+
+function exportSalaryCsv(){
+  const MN=['','January','February','March','April','May','June','July','August','September','October','November','December'];
+  const rows=filteredSalary().map(s=>({Month:`${MN[s.month]} ${s.year}`,Employee:s.employeeName,
+    Designation:s.designation||'',Basic:s.basic,Allowances:s.allowance||0,Deductions:s.deduction,
+    Bonus:s.bonus,NetPayable:s.total,Status:s.status}));
+  rows.push({Month:'TOTAL',Employee:'',Designation:'',Basic:rows.reduce((x,r)=>x+r.Basic,0),
+    Allowances:rows.reduce((x,r)=>x+r.Allowances,0),Deductions:rows.reduce((x,r)=>x+r.Deductions,0),
+    Bonus:rows.reduce((x,r)=>x+r.Bonus,0),NetPayable:rows.reduce((x,r)=>x+r.NetPayable,0),Status:''});
+  csvDownload(`salary-slips-${salMonth||'all'}.csv`,rows);
 }
 
 /* ═══════════════════════════════════════════════════
