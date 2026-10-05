@@ -519,7 +519,7 @@ function renderVouchersPage(){
           <option ${vf.status==='All'?'selected':''}>All</option><option value="pending" ${vf.status==='pending'?'selected':''}>Pending</option><option value="partial" ${vf.status==='partial'?'selected':''}>Partial</option><option value="paid" ${vf.status==='paid'?'selected':''}>Paid</option></select></div>
         <div style="min-width:130px"><label>From</label><input type="date" id="vfFrom" value="${vf.from}" onchange="applyVoucherFilters()"></div>
         <div style="min-width:130px"><label>To</label><input type="date" id="vfTo" value="${vf.to}" onchange="applyVoucherFilters()"></div>
-        <div style="flex:0;min-width:auto;display:flex;gap:8px"><button class="btn-secondary" onclick="exportVoucherCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
+        <div style="flex:0;min-width:auto;display:flex;gap:8px"><button class="btn-secondary" onclick="exportVoucherPdf()"><i class="fa-solid fa-file-pdf"></i> PDF</button><button class="btn-secondary" onclick="exportVoucherCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px 4px">
@@ -968,6 +968,7 @@ function renderSalaryPage(){
         ${[['all','All'],['pending','Pending'],['paid','Paid']].map(([v,l])=>`<button class="${salFilter===v?'btn-primary':'btn-secondary'}" style="padding:7px 16px;font-size:13px" onclick="salFilter='${v}';salPage=1;render()">${l}${v==='pending'&&pendCount?` (${pendCount})`:''}</button>`).join('')}
         <input id="salQ" placeholder="Search employee…" value="${salQ.replace(/"/g,'&quot;')}" style="width:auto;margin-top:0;flex:1;min-width:150px" oninput="applySalaryFilters()">
         <input type="month" id="salMon" value="${salMonth}" style="width:auto;margin-top:0" onchange="applySalaryFilters()">
+        <button class="btn-secondary" style="padding:8px 14px;font-size:13px" onclick="exportSalaryPdf()" title="Download filtered slips as PDF"><i class="fa-solid fa-file-pdf"></i> PDF</button>
         <button class="btn-secondary" style="padding:8px 14px;font-size:13px" onclick="exportSalaryCsv()" title="Download filtered slips as CSV"><i class="fa-solid fa-file-csv"></i> CSV</button>
       </div>
     </div>
@@ -1524,6 +1525,44 @@ async function downloadPDF(elId,filename){
 /* ═══════════════════════════════════════════════════
    CSV EXPORT
 ═══════════════════════════════════════════════════ */
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function listingPdf(title,subtitle,thead,bodyHtml,tfootHtml,filename){
+  printFilename=filename||title.replace(/\s+/g,'-');
+  printContent=`<div id="docArea" class="doc" style="padding:32px 36px">${docHeader()}
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin:12px 0 4px">
+      <h2 style="color:var(--primary);letter-spacing:.5px">${title}</h2>
+      <span style="font-size:12px;color:#8896a6">${new Date().toLocaleString()}</span>
+    </div>
+    ${subtitle?`<p style="font-size:12.5px;color:#666;margin-bottom:12px">${subtitle}</p>`:'<div style="margin-bottom:8px"></div>'}
+    <table class="doc-table compact"><thead><tr>${thead}</tr></thead>
+      <tbody>${bodyHtml||`<tr><td colspan="20" style="text-align:center;color:#999;padding:24px">No records for the current filters.</td></tr>`}</tbody>
+      ${tfootHtml?`<tfoot>${tfootHtml}</tfoot>`:''}
+    </table>
+  </div>`;
+  printReturnRoute=route;route='print';render();
+  setTimeout(()=>downloadPDF('docArea',`${printFilename}.pdf`),350);
+}
+
+function exportVoucherPdf(){
+  const rows=filteredVouchers();
+  const sub=`Type: ${vf.type} • Status: ${vf.status} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.head!=='All'?` • Head: ${esc((db.heads.find(h=>h.id===vf.head)||{}).name||'')}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
+  const body=rows.map(v=>`<tr><td style="white-space:nowrap">${dateStr(v.date)}</td><td><strong>${esc(v.no)}</strong></td><td>${headLabel(v)}</td><td>${v.type}</td><td>${esc(v.party||'—')}</td><td style="font-size:12px;color:#666">${esc(v.description||'—')}</td><td style="text-align:right;font-weight:600;white-space:nowrap">${money(v.amount)}</td><td>${vStatusBadge(v)}</td></tr>`).join('');
+  const paid=rows.reduce((s,v)=>s+v.paid,0),tot=rows.reduce((s,v)=>s+v.total,0);
+  const foot=`<tr><td colspan="6" style="text-align:right;font-weight:800">TOTALS — Paid ${money(paid)} of ${money(tot)} billed</td><td style="text-align:right;font-weight:800;white-space:nowrap">${money(paid)}</td><td></td></tr>`;
+  listingPdf('Voucher Register',sub,'<th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th style="text-align:right">Amount</th><th>Status</th>',body,foot,`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`);
+}
+
+function exportSalaryPdf(){
+  const rows=filteredSalary();
+  const MN=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const sub=`Status: ${salFilter[0].toUpperCase()+salFilter.slice(1)}${salMonth?` • Month: ${salMonth}`:''}${salQ?` • Search: "${esc(salQ)}"`:''} • ${rows.length} slip${rows.length===1?'':'s'}`;
+  const body=rows.map(s=>`<tr><td style="white-space:nowrap"><strong>${MN[s.month]} ${s.year}</strong></td><td>${esc(s.employeeName)}</td><td style="font-size:12px;color:#666">${esc(s.designation||'—')}</td><td style="text-align:right">${money(s.basic)}</td><td style="text-align:right">${money(s.allowance||0)}</td><td style="text-align:right">${money(s.deduction)}</td><td style="text-align:right">${money(s.bonus)}</td><td style="text-align:right;font-weight:700;white-space:nowrap">${money(s.total)}</td><td>${s.status==='paid'?'<span class="badge badge-income">Paid</span>':'<span class="badge badge-warn">Pending</span>'}</td></tr>`).join('');
+  const net=rows.reduce((x,s)=>x+s.total,0);
+  const foot=`<tr><td colspan="7" style="text-align:right;font-weight:800">TOTAL NET PAYABLE</td><td style="text-align:right;font-weight:800;white-space:nowrap">${money(net)}</td><td></td></tr>`;
+  listingPdf('Salary Register',sub,'<th>Month</th><th>Employee</th><th>Designation</th><th style="text-align:right">Basic</th><th style="text-align:right">Allow.</th><th style="text-align:right">Deduct.</th><th style="text-align:right">Bonus</th><th style="text-align:right">Net Payable</th><th>Status</th>',body,foot,`salary-slips-${salMonth||'all'}`);
+}
+
 function csvDownload(filename,rows){
   if(!rows.length){toast('Nothing to export.','warn');return;}
   const keys=Object.keys(rows[0]);
