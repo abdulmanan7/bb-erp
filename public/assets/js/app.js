@@ -428,8 +428,8 @@ function vStatusBadge(v){
     :'<span class="badge badge-income">Paid</span>';
 }
 function voucherRowHtml(v){
-  const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
-  return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${headLabel(v)}</td><td>${badge}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td style="white-space:nowrap"><strong>${money(v.amount)}</strong>${v.total>v.amount?`<div style="font-size:11px;color:#8896a6">of ${money(v.total)}</div>`:''}</td><td>${vStatusBadge(v)}</td><td style="color:#888;font-size:12px">${v.createdBy}</td>
+  const amt=`<strong>${money(v.amount)}</strong>${v.total>v.amount?`<div style="font-size:11px;color:#8896a6">of ${money(v.total)}</div>`:''}`;
+  return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${headLabel(v)}</td><td>${v.party||'—'}</td><td style="color:#666;font-size:13px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.description||'—'}</td><td style="white-space:nowrap;text-align:right;color:#1e8449">${v.type==='Receipt'?amt:''}</td><td style="white-space:nowrap;text-align:right;color:#c0392b">${v.type==='Payment'?amt:''}</td><td>${vStatusBadge(v)}</td>
   <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="viewVoucher('${v.id}')" title="View"><i class="fa-solid fa-eye"></i></button> <button class="link-btn" onclick="payVoucherModal('${v.id}')" title="Payments"><i class="fa-solid fa-coins"></i></button> <button class="link-btn" onclick="openVoucherPrint('${v.id}')" title="Print view"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="downloadVoucherPdf('${v.id}')" title="Download PDF"><i class="fa-solid fa-file-arrow-down"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
 }
 
@@ -441,8 +441,10 @@ function vouchCountText(rows){
 
 function vouchFootHtml(rows){
   if(!rows.length)return'';
-  const total=rows.reduce((s,v)=>s+v.amount,0);
-  return `<tr style="background:#f7f9fc"><td colspan="6" style="text-align:right;font-weight:700;padding:12px 14px">TOTAL</td><td style="font-weight:800;padding:12px 14px;white-space:nowrap">${money(total)}</td><td colspan="3"></td></tr>`;
+  const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
+  const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
+  const net=inc-exp;
+  return `<tr style="background:#f7f9fc"><td colspan="5" style="text-align:right;font-weight:700;padding:12px 14px">TOTAL</td><td style="font-weight:800;padding:12px 14px;white-space:nowrap;color:#1e8449">${money(inc)}</td><td style="font-weight:800;padding:12px 14px;white-space:nowrap;color:#c0392b">${money(exp)}</td><td colspan="2" style="font-weight:800;padding:12px 14px;white-space:nowrap;color:${net<0?'#c0392b':'#1e8449'}" title="Balance (In − Out)">Balance ${money(net)}</td></tr>`;
 }
 
 function vfSubOptions(){
@@ -475,7 +477,7 @@ function vouchPagerHtml(total,pages){
 function renderVouchTable(){
   const rows=filteredVouchers();
   const {slice,pages}=vouchPageSlice(rows);
-  document.getElementById('vouchBody').innerHTML=slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="10">No vouchers match the filters.</td></tr>';
+  document.getElementById('vouchBody').innerHTML=slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>';
   document.getElementById('vouchFoot').innerHTML=vouchFootHtml(rows);
   document.getElementById('vouchCount').textContent=vouchCountText(rows);
   document.getElementById('vouchPager').innerHTML=vouchPagerHtml(rows.length,pages);
@@ -528,8 +530,8 @@ function renderVouchersPage(){
         <select id="vfPer" style="width:auto;margin-top:0;padding:5px 8px;font-size:12.5px" onchange="vfSetPer(this.value)">${perOpts}</select> per page</label>
     </div>
     <table class="list-table">
-      <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th>Amount</th><th>Status</th><th>By</th><th>Actions</th></tr></thead>
-      <tbody id="vouchBody">${slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="10">No vouchers match the filters.</td></tr>'}</tbody>
+      <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Party</th><th>Description</th><th style="text-align:right">Cash In</th><th style="text-align:right">Cash Out</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="vouchBody">${slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>'}</tbody>
       <tfoot id="vouchFoot">${vouchFootHtml(rows)}</tfoot>
     </table>
     <div class="pager" id="vouchPager">${vouchPagerHtml(rows.length,pages)}</div>`);
@@ -548,7 +550,9 @@ function renderAddPage(){
 
 function renderMinePage(){
   const rows=[...db.vouchers].filter(v=>v.createdBy===session.name).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const total=rows.reduce((s,v)=>s+v.amount,0);
+  const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
+  const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
+  const net=inc-exp;
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-clipboard-list"></i> My Entries</h2><span class="badge badge-neutral">${rows.length} records</span></div>
     <table class="list-table">
@@ -556,7 +560,7 @@ function renderMinePage(){
       <tbody>${rows.map(v=>{
         return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${headLabel(v)}</td><td>${v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>'} ${vStatusBadge(v)}</td><td><strong>${money(v.amount)}</strong></td><td><button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> View</button></td></tr>`;
       }).join('')||'<tr class="empty-row"><td colspan="6">No entries yet.</td></tr>'}
-      ${rows.length?`<tr style="background:#f7f9fc"><td colspan="4" style="text-align:right;font-weight:700;padding:12px 14px">Total</td><td style="font-weight:800;padding:12px 14px">${money(total)}</td><td></td></tr>`:''}</tbody>
+      ${rows.length?`<tr style="background:#f7f9fc"><td colspan="4" style="text-align:right;font-weight:700;padding:12px 14px">Total — In <span style="color:#1e8449">${money(inc)}</span> • Out <span style="color:#c0392b">${money(exp)}</span></td><td style="font-weight:800;padding:12px 14px;white-space:nowrap;color:${net<0?'#c0392b':'#1e8449'}">${money(net)}</td><td></td></tr>`:''}</tbody>
     </table>`);
 }
 
@@ -1322,15 +1326,17 @@ function generateReport(){
         <div class="s-card expense"><div class="label">Total Cash Out</div><div class="value">${money(exp)}</div></div>
       </div>
       ${Object.keys(hMap).length>1?`<h4 style="margin:14px 0 8px;color:var(--primary)">Head-wise Summary</h4>
-      <table class="doc-table"><thead><tr><th>Account Head</th><th>Cash In</th><th>Cash Out</th></tr></thead>
-      <tbody>${Object.entries(hMap).map(([k,d])=>`<tr><td>${headSubName(k)}</td><td style="white-space:nowrap">${money(d.inc)}</td><td style="white-space:nowrap">${money(d.exp)}</td></tr>`).join('')}</tbody></table>`:''}
+      <table class="doc-table"><thead><tr><th>Account Head</th><th>Cash In</th><th>Cash Out</th><th>Balance</th></tr></thead>
+      <tbody>${Object.entries(hMap).map(([k,d])=>`<tr><td>${headSubName(k)}</td><td style="white-space:nowrap">${money(d.inc)}</td><td style="white-space:nowrap">${money(d.exp)}</td><td style="white-space:nowrap;font-weight:700;color:${d.inc-d.exp<0?'#c0392b':'#1e8449'}">${money(d.inc-d.exp)}</td></tr>`).join('')}
+      <tr style="background:#f0f3f7"><td style="font-weight:800">TOTAL</td><td style="font-weight:800;white-space:nowrap">${money(inc)}</td><td style="font-weight:800;white-space:nowrap">${money(exp)}</td><td style="font-weight:800;white-space:nowrap;color:${inc-exp<0?'#c0392b':'#1e8449'}">${money(inc-exp)}</td></tr></tbody></table>`:''}
       <h4 style="margin:18px 0 8px;color:var(--primary)">All Transactions (${rows.length})</h4>
       <table class="doc-table">
-        <thead><tr><th>Date</th><th>Voucher No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+        <thead><tr><th>Date</th><th>Voucher No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th style="text-align:right">Cash In</th><th style="text-align:right">Cash Out</th></tr></thead>
         <tbody>${rows.map(v=>{
-          return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${headLabel(v)}</td><td style="color:${v.type==='Payment'?'#c0392b':'#1e8449'};font-weight:600">${v.type}</td><td>${v.party||'—'}</td><td style="font-size:12px;color:#666">${v.description||'—'}</td><td style="text-align:right;font-weight:600;white-space:nowrap;font-size:13px">${money(v.amount)}</td></tr>`;
-        }).join('')||'<tr class="empty-row"><td colspan="7">No records found for selected filters.</td></tr>'}
-        ${rows.length?`<tr style="background:#f0f3f7"><td colspan="6" style="text-align:right;font-weight:800;padding:12px 14px">TOTAL</td><td style="text-align:right;font-weight:800;padding:12px 14px;white-space:nowrap;font-size:13.5px">${money(rows.reduce((s,v)=>s+v.amount,0))}</td></tr>`:''}</tbody>
+          return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${headLabel(v)}</td><td style="color:${v.type==='Payment'?'#c0392b':'#1e8449'};font-weight:600">${v.type}</td><td>${v.party||'—'}</td><td style="font-size:12px;color:#666">${v.description||'—'}</td><td style="text-align:right;font-weight:600;white-space:nowrap;font-size:13px;color:#1e8449">${v.type==='Receipt'?money(v.amount):''}</td><td style="text-align:right;font-weight:600;white-space:nowrap;font-size:13px;color:#c0392b">${v.type==='Payment'?money(v.amount):''}</td></tr>`;
+        }).join('')||'<tr class="empty-row"><td colspan="8">No records found for selected filters.</td></tr>'}
+        ${rows.length?`<tr style="background:#f0f3f7"><td colspan="6" style="text-align:right;font-weight:800;padding:12px 14px">TOTAL</td><td style="text-align:right;font-weight:800;padding:12px 14px;white-space:nowrap;font-size:13.5px;color:#1e8449">${money(inc)}</td><td style="text-align:right;font-weight:800;padding:12px 14px;white-space:nowrap;font-size:13.5px;color:#c0392b">${money(exp)}</td></tr>
+        <tr style="background:#f0f3f7"><td colspan="6" style="text-align:right;font-weight:800;padding:12px 14px">NET BALANCE</td><td colspan="2" style="text-align:right;font-weight:800;padding:12px 14px;white-space:nowrap;font-size:13.5px;color:${inc-exp<0?'#c0392b':'#1e8449'}">${money(inc-exp)}</td></tr>`:''}</tbody>
       </table>
       <p style="text-align:center;font-size:11px;color:#bbb;margin-top:20px">Generated by ${db.settings.companyName} ERP • ${new Date().toLocaleString()}</p>
     </div>`;
