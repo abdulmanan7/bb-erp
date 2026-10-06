@@ -433,6 +433,24 @@ function voucherRowHtml(v){
   <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="viewVoucher('${v.id}')" title="View"><i class="fa-solid fa-eye"></i></button> <button class="link-btn" onclick="payVoucherModal('${v.id}')" title="Payments"><i class="fa-solid fa-coins"></i></button> <button class="link-btn" onclick="openVoucherPrint('${v.id}')" title="Print view"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="downloadVoucherPdf('${v.id}')" title="Download PDF"><i class="fa-solid fa-file-arrow-down"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
 }
 
+function vouchStatsHtml(rows){
+  const by=(t,st)=>rows.filter(v=>(t==='*'||v.type===t)&&(!st||v.status===st));
+  const sum=(rs,f)=>rs.reduce((s,v)=>s+v[f],0);
+  const receipts=by('Receipt'),payments=by('Payment');
+  const pending=by('*','pending'),partial=by('*','partial'),paid=by('*','paid');
+  const card=(cls,label,val,note)=>`<div class="s-card ${cls}" style="padding:13px 16px">
+    <div class="label">${label}</div>
+    <div class="value" style="font-size:17px;margin-top:4px">${val}</div>
+    <div style="font-size:11px;color:#8896a6;margin-top:3px">${note}</div></div>`;
+  return `<div class="summary-cards" style="gap:10px;margin-bottom:14px">
+    ${card('income','Cash In',money(sum(receipts,'amount')),`${receipts.length} receipt${receipts.length===1?'':'s'}`)}
+    ${card('expense','Cash Out',money(sum(payments,'amount')),`${payments.length} payment${payments.length===1?'':'s'}`)}
+    ${card('net','Pending',pending.length,`${money(sum(pending,'total'))} unpaid`)}
+    ${card('neutral','Partial',partial.length,`${money(partial.reduce((s,v)=>s+(v.total-v.paid),0))} remaining`)}
+    ${card('income','Paid',paid.length,`${money(sum(paid,'paid'))} settled`)}
+  </div>`;
+}
+
 function vouchCountText(rows){
   const pay=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const rec=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
@@ -477,6 +495,7 @@ function vouchPagerHtml(total,pages){
 function renderVouchTable(){
   const rows=filteredVouchers();
   const {slice,pages}=vouchPageSlice(rows);
+  document.getElementById('vouchStats').innerHTML=vouchStatsHtml(rows);
   document.getElementById('vouchBody').innerHTML=slice.map(voucherRowHtml).join('')||'<tr class="empty-row"><td colspan="9">No vouchers match the filters.</td></tr>';
   document.getElementById('vouchFoot').innerHTML=vouchFootHtml(rows);
   document.getElementById('vouchCount').textContent=vouchCountText(rows);
@@ -524,6 +543,7 @@ function renderVouchersPage(){
         <div style="flex:0;min-width:auto;display:flex;gap:8px"><button class="btn-secondary" onclick="exportVoucherPdf()"><i class="fa-solid fa-file-pdf"></i> PDF</button><button class="btn-secondary" onclick="exportVoucherCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
       </div>
     </div>
+    <div id="vouchStats">${vouchStatsHtml(rows)}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px 4px">
       <div id="vouchCount" style="font-size:12px;color:#8896a6">${vouchCountText(rows)}</div>
       <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#5b6b7d;text-transform:none;letter-spacing:0">Show
