@@ -208,7 +208,10 @@ function renderDashboard(){
   const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const aInc=db.vouchers.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const aExp=db.vouchers.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
-  const recent=[...tm].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10);
+  const hAgg={};
+  tm.forEach(v=>{if(!hAgg[v.headId])hAgg[v.headId]={inc:0,exp:0};if(v.type==='Receipt')hAgg[v.headId].inc+=v.amount;else hAgg[v.headId].exp+=v.amount;});
+  const hRows=Object.entries(hAgg).map(([hid,d])=>({name:(db.heads.find(x=>x.id===hid)||{name:'—'}).name,...d})).sort((a,b)=>(b.inc+b.exp)-(a.inc+a.exp));
+  const maxAct=Math.max(1,...hRows.map(r=>r.inc+r.exp));
   return shell(`
     <div class="page-header">
       <h2><i class="fa-solid fa-gauge-high"></i> Dashboard</h2>
@@ -224,6 +227,7 @@ function renderDashboard(){
         <span style="color:#8896a6">→</span>
         <input type="date" id="dashTo" value="${to}" style="width:auto;margin-top:0" onchange="applyDashRange()">
         <button class="link-btn" onclick="dashFrom='';dashTo='';render()"><i class="fa-solid fa-rotate-left"></i> This month</button>
+        <button class="btn-secondary" style="padding:7px 14px;font-size:13px;margin-left:auto" onclick="exportDashPdf()"><i class="fa-solid fa-file-pdf"></i> PDF</button>
       </div>
     </div>
     <div class="summary-cards">
@@ -238,18 +242,76 @@ function renderDashboard(){
       <button class="btn-secondary" onclick="navigate('salary');setTimeout(salaryForm,50)"><i class="fa-solid fa-money-bill-wave"></i> New Salary Slip</button>
       <button class="btn-secondary" onclick="navigate('reports')"><i class="fa-solid fa-chart-line"></i> Reports</button>
     </div>
-    <div class="page-title-bar">
-      <strong>Transactions <span style="color:#8896a6;font-weight:500;font-size:12.5px">${dateStr(from)} — ${dateStr(to)}</span></strong>
-      <button class="btn-secondary" style="font-size:13px;padding:7px 14px" onclick="navigate('vouchers')">View All <i class="fa-solid fa-arrow-right"></i></button>
+    <div class="dash-grid">
+      <div class="page-title-bar" style="display:block;padding:18px 20px;margin-bottom:0">
+        <strong style="font-size:13.5px;color:var(--primary)"><i class="fa-solid fa-chart-pie" style="color:var(--secondary)"></i> Cash In vs Cash Out</strong>
+        ${inc+exp>0?`<div style="position:relative;height:210px;margin-top:12px">
+          <canvas id="dashChart"></canvas>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
+            <span style="font-size:10px;font-weight:700;color:#8896a6;letter-spacing:1px">NET</span>
+            <strong style="font-size:18px;color:${inc-exp<0?'var(--danger)':'var(--primary)'}">${money(inc-exp)}</strong>
+          </div></div>
+          <div style="display:flex;justify-content:center;gap:18px;margin-top:12px;font-size:12px;color:#5b6b7d">
+            <span><i class="fa-solid fa-circle" style="color:#1e8449;font-size:9px"></i> Cash In ${money(inc)}</span>
+            <span><i class="fa-solid fa-circle" style="color:#c0392b;font-size:9px"></i> Cash Out ${money(exp)}</span>
+          </div>`
+        :'<p style="font-size:13px;color:#8896a6;padding:40px 0;text-align:center">No activity in this range.</p>'}
+      </div>
+      <div class="page-title-bar" style="display:block;padding:0;margin-bottom:0;overflow:hidden">
+        <table class="list-table" style="box-shadow:none;border:none">
+          <thead><tr><th colspan="2">Head-wise — ${dateStr(from)} → ${dateStr(to)}</th><th style="text-align:right">Cash In</th><th style="text-align:right">Cash Out</th></tr></thead>
+          <tbody>${hRows.map(r=>`<tr><td><strong>${r.name}</strong></td>
+            <td style="width:34%"><div class="hbar"><div style="width:${Math.round((r.inc+r.exp)/maxAct*100)}%"></div></div></td>
+            <td style="text-align:right;white-space:nowrap;color:#1e8449;font-weight:600">${r.inc?money(r.inc):''}</td>
+            <td style="text-align:right;white-space:nowrap;color:#c0392b;font-weight:600">${r.exp?money(r.exp):''}</td></tr>`).join('')
+            ||'<tr class="empty-row"><td colspan="4">No activity in this range.</td></tr>'}
+          </tbody>
+          ${hRows.length?`<tfoot><tr><td colspan="2" style="font-weight:800">TOTAL</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:#1e8449">${money(inc)}</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:#c0392b">${money(exp)}</td></tr></tfoot>`:''}
+        </table>
+      </div>
+    </div>`);
+}
+
+let dashChart=null;
+function drawDashChart(){
+  const cv=document.getElementById('dashChart');
+  if(!cv||typeof Chart==='undefined')return;
+  if(dashChart){dashChart.destroy();dashChart=null;}
+  const {from,to}=dashRange();
+  const tm=db.vouchers.filter(v=>v.date>=from&&v.date<=to);
+  const inc=tm.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
+  const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
+  dashChart=new Chart(cv,{type:'doughnut',
+    data:{labels:['Cash In','Cash Out'],datasets:[{data:[inc,exp],backgroundColor:['#1e8449','#c0392b'],borderWidth:2,borderColor:'#fff',hoverOffset:6}]},
+    options:{maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.label+': '+money(c.parsed)}}}}});
+}
+
+function exportDashPdf(){
+  const {from,to}=dashRange();
+  const tm=db.vouchers.filter(v=>v.date>=from&&v.date<=to);
+  const inc=tm.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
+  const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
+  const hAgg={};
+  tm.forEach(v=>{if(!hAgg[v.headId])hAgg[v.headId]={inc:0,exp:0};if(v.type==='Receipt')hAgg[v.headId].inc+=v.amount;else hAgg[v.headId].exp+=v.amount;});
+  const hRows=Object.entries(hAgg).map(([hid,d])=>({name:(db.heads.find(x=>x.id===hid)||{name:'—'}).name,...d})).sort((a,b)=>(b.inc+b.exp)-(a.inc+a.exp));
+  printFilename=`Dashboard-${from}-to-${to}`;
+  printContent=`<div id="docArea" class="doc">${docHeader()}
+    <h3 style="text-align:center;color:var(--primary)">DASHBOARD SUMMARY</h3>
+    <p style="text-align:center;color:#888;margin-bottom:18px">${dateStr(from)} — ${dateStr(to)}</p>
+    <div class="summary-cards">
+      <div class="s-card income"><div class="label">Cash In</div><div class="value">${money(inc)}</div></div>
+      <div class="s-card expense"><div class="label">Cash Out</div><div class="value">${money(exp)}</div></div>
+      <div class="s-card net"><div class="label">Net</div><div class="value">${money(inc-exp)}</div></div>
     </div>
-    <table class="list-table">
-      <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Party</th><th>Amount</th><th>By</th><th></th></tr></thead>
-      <tbody>${recent.map(v=>{
-        const h=db.heads.find(x=>x.id===v.headId)||{name:'—'};
-        const badge=v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>';
-        return `<tr><td>${dateStr(v.date)}</td><td><strong>${v.no}</strong></td><td>${h.name}</td><td>${badge}</td><td>${v.party||'—'}</td><td><strong>${money(v.amount)}</strong></td><td style="color:#888;font-size:12px">${v.createdBy}</td><td><button class="link-btn" onclick="openVoucherPrint('${v.id}')">View</button></td></tr>`;
-      }).join('')||'<tr class="empty-row"><td colspan="8">No transactions in this range.</td></tr>'}</tbody>
-    </table>`);
+    <h4 style="margin:14px 0 8px;color:var(--primary)">Head-wise Summary</h4>
+    <table class="doc-table"><thead><tr><th>Account Head</th><th>Cash In</th><th>Cash Out</th></tr></thead>
+    <tbody>${hRows.map(r=>`<tr><td>${r.name}</td><td style="white-space:nowrap">${money(r.inc)}</td><td style="white-space:nowrap">${money(r.exp)}</td></tr>`).join('')
+      ||'<tr><td colspan="3" style="text-align:center;color:#999">No activity in this range.</td></tr>'}
+    ${hRows.length?`<tr style="background:#f0f3f7"><td style="font-weight:800">TOTAL</td><td style="font-weight:800;white-space:nowrap">${money(inc)}</td><td style="font-weight:800;white-space:nowrap">${money(exp)}</td></tr>`:''}</tbody></table>
+    <p style="text-align:center;font-size:11px;color:#bbb;margin-top:20px">Generated by ${db.settings.companyName} ERP • ${new Date().toLocaleString()}</p>
+  </div>`;
+  printReturnRoute=route;route='print';render();
+  setTimeout(()=>downloadPDF('docArea',`${printFilename}.pdf`),350);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1646,6 +1708,7 @@ function render(){
   if(!session){app.innerHTML=renderLogin();return;}
   const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage};
   app.innerHTML=(pages[route]||renderDashboard)();
+  if(route==='dashboard')setTimeout(drawDashChart,0);
 }
 
 /* ── BOOT ── */
