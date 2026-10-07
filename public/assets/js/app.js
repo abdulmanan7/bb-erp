@@ -210,7 +210,7 @@ function renderDashboard(){
   const aExp=db.vouchers.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const hAgg={};
   tm.forEach(v=>{if(!hAgg[v.headId])hAgg[v.headId]={inc:0,exp:0};if(v.type==='Receipt')hAgg[v.headId].inc+=v.amount;else hAgg[v.headId].exp+=v.amount;});
-  const hRows=Object.entries(hAgg).map(([hid,d])=>({name:(db.heads.find(x=>x.id===hid)||{name:'—'}).name,...d})).sort((a,b)=>(b.inc+b.exp)-(a.inc+a.exp));
+  const hRows=Object.entries(hAgg).map(([hid,d])=>({id:hid,name:(db.heads.find(x=>x.id===hid)||{name:'—'}).name,...d})).sort((a,b)=>(b.inc+b.exp)-(a.inc+a.exp));
   const maxAct=Math.max(1,...hRows.map(r=>r.inc+r.exp));
   return shell(`
     <div class="page-header">
@@ -260,7 +260,7 @@ function renderDashboard(){
       <div class="page-title-bar" style="display:block;padding:0;margin-bottom:0;overflow:hidden">
         <table class="list-table" style="box-shadow:none;border:none">
           <thead><tr><th colspan="2">Head-wise — ${dateStr(from)} → ${dateStr(to)}</th><th style="text-align:right">Cash In</th><th style="text-align:right">Cash Out</th></tr></thead>
-          <tbody>${hRows.map(r=>`<tr><td><strong>${r.name}</strong></td>
+          <tbody>${hRows.map(r=>`<tr style="cursor:pointer" title="View vouchers" onclick="viewHeadVouchers('${r.id}')"><td><strong>${r.name}</strong></td>
             <td style="width:34%"><div class="hbar"><div style="width:${Math.round((r.inc+r.exp)/maxAct*100)}%"></div></div></td>
             <td style="text-align:right;white-space:nowrap;color:#1e8449;font-weight:600">${r.inc?money(r.inc):''}</td>
             <td style="text-align:right;white-space:nowrap;color:#c0392b;font-weight:600">${r.exp?money(r.exp):''}</td></tr>`).join('')
@@ -270,6 +270,12 @@ function renderDashboard(){
         </table>
       </div>
     </div>`);
+}
+
+function viewHeadVouchers(headId){
+  const {from,to}=dashRange();
+  vf={q:'',type:'All',head:headId,sub:'All',status:'All',from,to,page:1,perPage:vf.perPage};
+  navigate('vouchers');
 }
 
 let dashChart=null;
@@ -1409,8 +1415,8 @@ function generateReport(){
         <div class="s-card net"><div class="label">Balance</div><div class="value" style="color:${inc-exp<0?'var(--danger)':'var(--primary)'}">${money(inc-exp)}</div></div>
       </div>
       ${Object.keys(hMap).length>1?`<h4 style="margin:14px 0 8px;color:var(--primary)">Head-wise Summary</h4>
-      <table class="doc-table"><thead><tr><th>Account Head</th><th>Cash In</th><th>Cash Out</th></tr></thead>
-      <tbody>${Object.entries(hMap).map(([k,d])=>`<tr><td>${headSubName(k)}</td><td style="white-space:nowrap">${money(d.inc)}</td><td style="white-space:nowrap">${money(d.exp)}</td></tr>`).join('')}
+      <table class="doc-table borderless"><thead><tr><th>Account Head</th><th>Cash In</th><th>Cash Out</th></tr></thead>
+      <tbody>${Object.entries(hMap).map(([k,d])=>`<tr><td>${headSubName(k)}</td><td style="white-space:nowrap">${d.inc?money(d.inc):''}</td><td style="white-space:nowrap">${d.exp?money(d.exp):''}</td></tr>`).join('')}
       <tr style="background:#f0f3f7"><td style="font-weight:800">TOTAL</td><td style="font-weight:800;white-space:nowrap">${money(inc)}</td><td style="font-weight:800;white-space:nowrap">${money(exp)}</td></tr></tbody></table>`:''}
       <h4 style="margin:18px 0 8px;color:var(--primary)">All Transactions (${rows.length})</h4>
       <table class="doc-table compact">

@@ -98,6 +98,8 @@ button{cursor:pointer;transition:all .18s;font-family:inherit;}
 .doc-table th,.doc-table td{border:1px solid #dfe5ec;padding:11px 14px;text-align:left;font-size:14px;}
 .doc-table th{background:#f5f8fb;font-weight:700;}
 .doc-table.compact th,.doc-table.compact td{padding:7px 12px;font-size:13px;}
+.doc-table.borderless th,.doc-table.borderless td{border:none;border-bottom:1px solid #eef2f6;}
+.doc-table.borderless thead th{border-bottom:2px solid var(--border);}
 .sign-row{display:flex;justify-content:space-between;margin-top:60px;font-size:13px;color:#555;}
 .sign-row.compact{margin-top:30px;font-size:12px;}
 .sign-row div{text-align:center;}
