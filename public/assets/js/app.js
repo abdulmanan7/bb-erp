@@ -274,7 +274,7 @@ function renderDashboard(){
 
 function viewHeadVouchers(headId){
   const {from,to}=dashRange();
-  vf={q:'',type:'All',head:headId,sub:'All',status:'All',from,to,page:1,perPage:vf.perPage};
+  vf={q:'',type:'All',heads:[headId],sub:'All',status:'All',by:'All',from,to,page:1,perPage:vf.perPage};
   navigate('vouchers');
 }
 
@@ -323,18 +323,39 @@ function exportDashPdf(){
 /* ═══════════════════════════════════════════════════
    ACCOUNT HEADS
 ═══════════════════════════════════════════════════ */
+let hf={q:'',type:'All',group:'All'};
+function filteredHeads(){
+  const q=hf.q.toLowerCase();
+  return db.heads.filter(h=>{
+    if(hf.type!=='All'&&h.type!==hf.type)return false;
+    if(hf.group!=='All'&&h.group!==hf.group)return false;
+    if(q&&!(`${h.name} ${h.group||''} ${(db.subHeads||[]).filter(s=>s.headId===h.id).map(s=>s.name).join(' ')}`.toLowerCase().includes(q)))return false;
+    return true;
+  });
+}
 function renderHeadsPage(){
+  const rows=filteredHeads();
+  const groups=[...new Set(db.heads.map(h=>h.group).filter(Boolean))].sort();
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-folder-tree"></i> Account Heads</h2><button class="btn-primary" onclick="headForm()"><i class="fa-solid fa-plus"></i> Add Head</button></div>
+    <div class="page-title-bar" style="padding:12px 18px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="hfQ" placeholder="Search head, group or sub-head…" value="${hf.q.replace(/"/g,'&quot;')}" style="flex:1;min-width:180px;margin-top:0" oninput="hf.q=this.value;render()">
+        <select style="width:auto;min-width:110px;margin-top:0" onchange="hf.type=this.value;render()"><option value="All">All Types</option><option value="Expense" ${hf.type==='Expense'?'selected':''}>Expense</option><option value="Income" ${hf.type==='Income'?'selected':''}>Income</option></select>
+        <select style="width:auto;min-width:120px;margin-top:0" onchange="hf.group=this.value;render()"><option value="All">All Groups</option>${groups.map(g=>`<option ${hf.group===g?'selected':''}>${g}</option>`).join('')}</select>
+        <button class="btn-secondary" onclick="hf={q:'',type:'All',group:'All'};render()"><i class="fa-solid fa-arrow-rotate-left"></i> Reset</button>
+        <span style="font-size:12px;color:#8896a6;margin-left:auto">${rows.length} head${rows.length===1?'':'s'}</span>
+      </div>
+    </div>
     <table class="list-table">
       <thead><tr><th>Head Name</th><th>Type</th><th>Group</th><th>Total Activity</th><th>Actions</th></tr></thead>
-      <tbody>${db.heads.map(h=>{
+      <tbody>${rows.map(h=>{
         const vol=db.vouchers.filter(v=>v.headId===h.id).reduce((s,v)=>s+v.amount,0);
         const subs=(db.subHeads||[]).filter(s=>s.headId===h.id);
         const badge=h.type==='Expense'?'<span class="badge badge-expense">Expense</span>':'<span class="badge badge-income">Income</span>';
         return `<tr><td><strong>${h.name}</strong>${subs.length?`<div style="margin-top:4px">${subs.map(s=>`<span class="badge badge-neutral" style="margin:1px;font-size:10px">${s.name}</span>`).join('')}</div>`:''}</td><td>${badge}</td><td>${h.group?`<span class="badge badge-neutral">${h.group}</span>`:'—'}</td><td><strong>${money(vol)}</strong></td>
         <td><button class="link-btn" onclick="headForm('${h.id}')"><i class="fa-solid fa-pen-to-square"></i> Edit</button> <button class="link-btn danger" onclick="deleteHead('${h.id}')"><i class="fa-solid fa-trash"></i> Delete</button></td></tr>`;
-      }).join('')||'<tr class="empty-row"><td colspan="5">No heads yet. Add your first account head above.</td></tr>'}</tbody>
+      }).join('')||'<tr class="empty-row"><td colspan="5">No heads match the filters.</td></tr>'}</tbody>
     </table>`);
 }
 
@@ -389,17 +410,39 @@ async function deleteHead(id){
 /* ═══════════════════════════════════════════════════
    EMPLOYEES
 ═══════════════════════════════════════════════════ */
+let ef={q:'',desig:'All',login:'All'};
+function filteredEmployees(){
+  const q=ef.q.toLowerCase();
+  return db.employees.filter(e=>{
+    if(ef.desig!=='All'&&e.designation!==ef.desig)return false;
+    if(ef.login==='Enabled'&&!e.loginEnabled)return false;
+    if(ef.login==='Disabled'&&e.loginEnabled)return false;
+    if(q&&!(`${e.name} ${e.phone||''} ${e.designation||''} ${e.username||''}`.toLowerCase().includes(q)))return false;
+    return true;
+  });
+}
 function renderEmployeesPage(){
+  const rows=filteredEmployees();
+  const desigs=[...new Set(db.employees.map(e=>e.designation).filter(Boolean))].sort();
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-users"></i> Employees & Access</h2><button class="btn-primary" onclick="employeeForm()"><i class="fa-solid fa-plus"></i> Add Employee</button></div>
+    <div class="page-title-bar" style="padding:12px 18px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="efQ" placeholder="Search name, phone, designation…" value="${ef.q.replace(/"/g,'&quot;')}" style="flex:1;min-width:180px;margin-top:0" oninput="ef.q=this.value;render()">
+        <select style="width:auto;min-width:130px;margin-top:0" onchange="ef.desig=this.value;render()"><option value="All">All Designations</option>${desigs.map(d=>`<option ${ef.desig===d?'selected':''}>${d}</option>`).join('')}</select>
+        <select style="width:auto;min-width:110px;margin-top:0" onchange="ef.login=this.value;render()"><option value="All">All Logins</option><option value="Enabled" ${ef.login==='Enabled'?'selected':''}>Enabled</option><option value="Disabled" ${ef.login==='Disabled'?'selected':''}>Disabled</option></select>
+        <button class="btn-secondary" onclick="ef={q:'',desig:'All',login:'All'};render()"><i class="fa-solid fa-arrow-rotate-left"></i> Reset</button>
+        <span style="font-size:12px;color:#8896a6;margin-left:auto">${rows.length} employee${rows.length===1?'':'s'}</span>
+      </div>
+    </div>
     <table class="list-table">
       <thead><tr><th>Name</th><th>Phone</th><th>Designation</th><th>Salary</th><th>Login</th><th>Allowed Heads</th><th>Actions</th></tr></thead>
-      <tbody>${db.employees.map(emp=>{
+      <tbody>${rows.map(emp=>{
         const heads=(emp.assignedHeads||[]).map(id=>{const h=db.heads.find(x=>x.id===id);return h?`<span class="badge badge-neutral" style="margin:1px">${h.name}</span>`:null;}).filter(Boolean).join('');
         const lb=emp.loginEnabled?`<span class="badge badge-income"><i class="fa-solid fa-check"></i> ${emp.username}</span>`:`<span class="badge badge-neutral">Disabled</span>`;
         return `<tr><td><strong>${emp.name}</strong></td><td>${emp.phone||'—'}</td><td>${emp.designation||'—'}</td><td style="white-space:nowrap">${emp.basic?`<strong>${money(emp.basic)}</strong>`:'—'}</td><td>${lb}</td><td>${heads||'—'}</td>
         <td><button class="link-btn" onclick="employeeForm('${emp.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteEmployee('${emp.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
-      }).join('')||'<tr class="empty-row"><td colspan="7">No employees yet.</td></tr>'}</tbody>
+      }).join('')||'<tr class="empty-row"><td colspan="7">No employees match the filters.</td></tr>'}</tbody>
     </table>`);
 }
 
@@ -464,14 +507,15 @@ async function deleteEmployee(id){
 /* ═══════════════════════════════════════════════════
    VOUCHERS
 ═══════════════════════════════════════════════════ */
-let vf={q:'',type:'All',head:'All',sub:'All',status:'All',from:'',to:'',page:1,perPage:20};
+let vf={q:'',type:'All',heads:[],sub:'All',status:'All',by:'All',from:'',to:'',page:1,perPage:20};
 
 function filteredVouchers(){
   const q=vf.q.toLowerCase();
   return db.vouchers.filter(v=>{
     if(vf.type!=='All'&&v.type!==vf.type)return false;
     if(vf.status!=='All'&&(v.status||'paid')!==vf.status)return false;
-    if(vf.head!=='All'&&v.headId!==vf.head)return false;
+    if(vf.by!=='All'&&v.createdBy!==vf.by)return false;
+    if(vf.heads.length&&!vf.heads.includes(v.headId))return false;
     if(vf.sub!=='All'&&v.subHeadId!==vf.sub)return false;
     if(vf.from&&v.date<vf.from)return false;
     if(vf.to&&v.date>vf.to)return false;
@@ -534,11 +578,27 @@ function vouchFootHtml(rows){
 }
 
 function vfSubOptions(){
-  const subs=(db.subHeads||[]).filter(s=>vf.head==='All'||s.headId===vf.head);
+  const subs=(db.subHeads||[]).filter(s=>!vf.heads.length||vf.heads.includes(s.headId));
   return `<option value="All">All Sub-Heads</option>`+subs.map(s=>{
-    const h=vf.head==='All'?(db.heads.find(x=>x.id===s.headId)||{}).name:null;
+    const h=vf.heads.length!==1?(db.heads.find(x=>x.id===s.headId)||{}).name:null;
     return `<option value="${s.id}" ${vf.sub===s.id?'selected':''}>${s.name}${h?' — '+h:''}</option>`;
   }).join('');
+}
+
+function vfHeadToggle(){document.getElementById('vfHeadPanel').classList.toggle('hidden');}
+function vfHeadToggleAll(cb){document.querySelectorAll('.vfHeadChk').forEach(c=>c.checked=cb.checked);vfHeadSync();}
+function vfHeadsLabel(){
+  if(!vf.heads.length)return 'All Heads';
+  const names=vf.heads.map(id=>(db.heads.find(h=>h.id===id)||{}).name||'?');
+  return names.length<=2?names.join(', '):`${names.length} heads`;
+}
+function vfHeadSync(){
+  const checked=[...document.querySelectorAll('.vfHeadChk:checked')].map(c=>c.value);
+  const all=document.querySelectorAll('.vfHeadChk').length;
+  vf.heads=checked.length===all?[]:checked;
+  document.getElementById('vfHeadAll').checked=checked.length===all;
+  document.getElementById('vfHeadLabel').textContent=vfHeadsLabel();
+  applyVoucherFilters();
 }
 
 function vouchPageSlice(rows){
@@ -576,7 +636,7 @@ function vfSetPer(v){vf.perPage=v==='all'?'all':parseInt(v);vf.page=1;renderVouc
 function applyVoucherFilters(){
   const subSel=document.getElementById('vfSub');
   vf={q:document.getElementById('vfQ').value.trim(),type:document.getElementById('vfType').value,
-      head:document.getElementById('vfHead').value,sub:subSel.value||'All',status:document.getElementById('vfStatus').value,
+      heads:vf.heads,sub:subSel.value||'All',status:document.getElementById('vfStatus').value,by:document.getElementById('vfBy').value,
       from:document.getElementById('vfFrom').value,to:document.getElementById('vfTo').value,
       page:1,perPage:vf.perPage};
   subSel.innerHTML=vfSubOptions();
@@ -586,7 +646,7 @@ function applyVoucherFilters(){
 }
 
 function clearVoucherFilters(){
-  vf={q:'',type:'All',head:'All',sub:'All',status:'All',from:'',to:'',page:1,perPage:20};
+  vf={q:'',type:'All',heads:[],sub:'All',status:'All',by:'All',from:'',to:'',page:1,perPage:20};
   render();
 }
 
@@ -594,7 +654,6 @@ function renderVouchersPage(){
   const rows=filteredVouchers();
   const {slice,pages}=vouchPageSlice(rows);
   const perOpts=[10,20,50,100].map(n=>`<option value="${n}" ${vf.perPage===n?'selected':''}>${n}</option>`).join('')+`<option value="all" ${vf.perPage==='all'?'selected':''}>All</option>`;
-  const headOpts=db.heads.map(h=>`<option value="${h.id}" ${vf.head===h.id?'selected':''}>${h.name}</option>`).join('');
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-receipt"></i> Vouchers</h2><button class="btn-primary" onclick="voucherForm()"><i class="fa-solid fa-plus"></i> New Voucher</button></div>
     <div class="page-title-bar" style="padding:14px 18px">
@@ -602,8 +661,17 @@ function renderVouchersPage(){
         <div style="flex:2.2;min-width:170px"><label>Search</label><input id="vfQ" placeholder="No., party, description…" value="${vf.q.replace(/"/g,'&quot;')}" oninput="applyVoucherFilters()"></div>
         <div style="min-width:110px"><label>Type</label><select id="vfType" onchange="applyVoucherFilters()">
           <option ${vf.type==='All'?'selected':''}>All</option><option ${vf.type==='Payment'?'selected':''}>Payment</option><option ${vf.type==='Receipt'?'selected':''}>Receipt</option></select></div>
-        <div style="min-width:140px"><label>Head</label><select id="vfHead" onchange="applyVoucherFilters()"><option value="All">All Heads</option>${headOpts}</select></div>
+        <div style="min-width:170px"><label>Heads</label>
+          <div class="ms-wrap">
+            <button type="button" class="ms-btn" onclick="vfHeadToggle()"><span id="vfHeadLabel">${vfHeadsLabel()}</span><i class="fa-solid fa-chevron-down"></i></button>
+            <div class="ms-panel hidden" id="vfHeadPanel">
+              <label class="chk"><input type="checkbox" id="vfHeadAll" ${!vf.heads.length?'checked':''} onchange="vfHeadToggleAll(this)">All Heads</label>
+              ${db.heads.map(h=>`<label class="chk"><input type="checkbox" class="vfHeadChk" value="${h.id}" ${vf.heads.includes(h.id)?'checked':''} onchange="vfHeadSync()">${h.name}</label>`).join('')}
+            </div>
+          </div>
+        </div>
         <div style="min-width:150px"><label>Sub-Head</label><select id="vfSub" onchange="applyVoucherFilters()">${vfSubOptions()}</select></div>
+        <div style="min-width:120px"><label>Created By</label><select id="vfBy" onchange="applyVoucherFilters()"><option value="All">All</option>${[...new Set(db.vouchers.map(v=>v.createdBy).filter(Boolean))].sort().map(c=>`<option ${vf.by===c?'selected':''}>${c}</option>`).join('')}</select></div>
         <div style="min-width:110px"><label>Status</label><select id="vfStatus" onchange="applyVoucherFilters()">
           <option ${vf.status==='All'?'selected':''}>All</option><option value="pending" ${vf.status==='pending'?'selected':''}>Pending</option><option value="partial" ${vf.status==='partial'?'selected':''}>Partial</option><option value="paid" ${vf.status==='paid'?'selected':''}>Paid</option></select></div>
         <div style="min-width:130px"><label>From</label><input type="date" id="vfFrom" value="${vf.from}" onchange="applyVoucherFilters()"></div>
@@ -876,10 +944,19 @@ function downloadVoucherPdf(id){autoPdf=true;openVoucherPrint(id);}
 /* ═══════════════════════════════════════════════════
    INVOICES
 ═══════════════════════════════════════════════════ */
+let invBy='All';
 function renderInvoicesPage(){
-  const sorted=[...db.invoices].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const sorted=[...db.invoices].filter(i=>invBy==='All'||i.createdBy===invBy).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const creators=[...new Set(db.invoices.map(i=>i.createdBy).filter(Boolean))].sort();
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-file-invoice"></i> Invoices</h2><button class="btn-primary" onclick="invoiceForm()"><i class="fa-solid fa-plus"></i> New Invoice</button></div>
+    <div class="page-title-bar" style="padding:10px 18px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="margin:0">Created By</label>
+        <select style="width:auto;min-width:140px;margin-top:0" onchange="invBy=this.value;render()"><option value="All">All</option>${creators.map(c=>`<option ${invBy===c?'selected':''}>${c}</option>`).join('')}</select>
+        <span style="font-size:12px;color:#8896a6;margin-left:auto">${sorted.length} invoice${sorted.length===1?'':'s'}</span>
+      </div>
+    </div>
     <table class="list-table">
       <thead><tr><th>Date</th><th>No.</th><th>Client</th><th>Items</th><th>Total</th><th>Actions</th></tr></thead>
       <tbody>${sorted.map(inv=>{
@@ -1641,7 +1718,7 @@ function listingPdf(title,subtitle,thead,bodyHtml,tfootHtml,filename){
 
 function exportVoucherPdf(){
   const rows=filteredVouchers();
-  const sub=`Type: ${vf.type} • Status: ${vf.status} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.head!=='All'?` • Head: ${esc((db.heads.find(h=>h.id===vf.head)||{}).name||'')}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
+  const sub=`Type: ${vf.type} • Status: ${vf.status} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.heads.length?` • Heads: ${esc(vfHeadsLabel())}`:''}${vf.by!=='All'?` • By: ${esc(vf.by)}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
   const body=rows.map(v=>`<tr><td style="white-space:nowrap">${dateStr(v.date)}</td><td><strong>${esc(v.no)}</strong></td><td>${headLabel(v)}</td><td>${v.type}</td><td>${esc(v.party||'—')}</td><td style="font-size:12px;color:#666">${esc(v.description||'—')}</td><td style="text-align:right;font-weight:600;white-space:nowrap">${money(v.amount)}</td><td>${vStatusBadge(v)}</td></tr>`).join('');
   const paid=rows.reduce((s,v)=>s+v.paid,0),tot=rows.reduce((s,v)=>s+v.total,0);
   const foot=`<tr><td colspan="6" style="text-align:right;font-weight:800">TOTALS — Paid ${money(paid)} of ${money(tot)} billed</td><td style="text-align:right;font-weight:800;white-space:nowrap">${money(paid)}</td><td></td></tr>`;
@@ -1711,10 +1788,14 @@ function closePrint(){route=printReturnRoute||savedRoute(session.role);printRetu
 function render(){
   applyTheme();
   const app=document.getElementById('app');
+  const ae=document.activeElement;
+  const fid=ae&&ae.id?ae.id:null;
+  const pos=fid&&'selectionStart' in ae?ae.selectionStart:null;
   if(!session){app.innerHTML=renderLogin();return;}
   const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage};
   app.innerHTML=(pages[route]||renderDashboard)();
   if(route==='dashboard')setTimeout(drawDashChart,0);
+  if(fid){const el=document.getElementById(fid);if(el){el.focus();if(pos!==null)try{el.setSelectionRange(pos,pos);}catch(e){}}}
 }
 
 /* ── BOOT ── */
