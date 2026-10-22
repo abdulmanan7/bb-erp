@@ -1657,7 +1657,8 @@ async function downloadPDF(elId,filename){
   const noprint=[...el.querySelectorAll('.noprint')].map(n=>[n,n.style.display]);
   noprint.forEach(([n])=>n.style.display='none');
   try{
-    const scale=2;
+    // Clamp scale so the canvas stays under browser limits (~16384px) — a fully blank PDF otherwise
+    const scale=Math.max(0.6,Math.min(2,15000/Math.max(el.offsetHeight,1),15000/Math.max(el.offsetWidth,1)));
     const canvas=await html2canvas(el,{scale,useCORS:true,logging:false,backgroundColor:'#fff'});
     const{jsPDF}=window.jspdf;
     const pdf=new jsPDF('p','pt','a4');
@@ -1726,11 +1727,11 @@ function exportVoucherPdf(){
     const amt=money(v.paid!==undefined?v.paid:v.amount);
     const hint=v.status!=='paid'&&v.total?`<div style="font-size:9.5px;color:#888">of ${money(v.total)}</div>`:'';
     const isIn=v.type==='Receipt';
-    return `<tr><td style="white-space:nowrap">${dateStr(v.date)}</td><td><strong>${esc(v.no)}</strong></td><td>${headLabel(v)}</td><td>${esc(v.party||'—')}</td><td style="font-size:12px;color:#666">${esc(v.description||'—')}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:var(--success)">${isIn?amt+hint:''}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:var(--danger)">${isIn?'':amt+hint}</td><td>${vStatusBadge(v)}</td></tr>`;
+    return `<tr><td style="white-space:nowrap">${dateStr(v.date)}</td><td><strong>${esc(v.no)}</strong></td><td>${headLabel(v)}</td><td>${esc(v.party||'—')}</td><td style="font-size:11.5px;color:#666">${esc(v.description||'—')}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:#1e8449">${isIn?amt+hint:''}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:#c0392b">${isIn?'':amt+hint}</td><td>${vStatusBadge(v)}</td></tr>`;
   }).join('');
   const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
   const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
-  const foot=`<tr><td colspan="5" style="text-align:right;font-weight:800">TOTAL</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:var(--success)">${money(inc)}</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:var(--danger)">${money(exp)}</td><td style="white-space:nowrap;font-weight:700;color:${inc-exp>=0?'var(--success)':'var(--danger)'}">Balance ${money(inc-exp)}</td></tr>`;
+  const foot=`<tr><td colspan="5" style="text-align:right;font-weight:800">TOTAL</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:#1e8449">${money(inc)}</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:#c0392b">${money(exp)}</td><td style="white-space:nowrap;font-weight:700;color:${inc-exp>=0?'#1e8449':'#c0392b'}">Balance ${money(inc-exp)}</td></tr>`;
   listingPdf('Voucher Register',sub,'<th>Date</th><th>No.</th><th>Head</th><th>Party</th><th>Description</th><th style="text-align:right">Cash In</th><th style="text-align:right">Cash Out</th><th>Status</th>',body,foot,`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`);
 }
 
