@@ -231,10 +231,10 @@ function renderDashboard(){
       </div>
     </div>
     <div class="summary-cards">
-      <div class="s-card income"><div class="label">Cash In</div><div class="value">${money(inc)}</div></div>
-      <div class="s-card expense"><div class="label">Cash Out</div><div class="value">${money(exp)}</div></div>
-      <div class="s-card net"><div class="label">Net</div><div class="value">${money(inc-exp)}</div></div>
-      <div class="s-card neutral"><div class="label">Overall Balance</div><div class="value">${money(aInc-aExp)}</div></div>
+      <div class="s-card income" style="cursor:pointer" title="View receipts" onclick="viewTypeVouchers('Receipt')"><div class="label">Cash In</div><div class="value">${money(inc)}</div></div>
+      <div class="s-card expense" style="cursor:pointer" title="View payments" onclick="viewTypeVouchers('Payment')"><div class="label">Cash Out</div><div class="value">${money(exp)}</div></div>
+      <div class="s-card net" style="cursor:pointer" title="View all vouchers in range" onclick="viewTypeVouchers('All')"><div class="label">Net</div><div class="value">${money(inc-exp)}</div></div>
+      <div class="s-card neutral" style="cursor:pointer" title="View all vouchers" onclick="viewTypeVouchers('All','','')"><div class="label">Overall Balance</div><div class="value">${money(aInc-aExp)}</div></div>
     </div>
     <div class="quick-actions">
       <button class="btn-primary" onclick="voucherForm()"><i class="fa-solid fa-receipt"></i> New Voucher</button>
@@ -275,6 +275,11 @@ function renderDashboard(){
 function viewHeadVouchers(headId){
   const {from,to}=dashRange();
   vf={q:'',type:'All',heads:[headId],sub:'All',status:'All',by:'All',from,to,page:1,perPage:vf.perPage};
+  navigate('vouchers');
+}
+function viewTypeVouchers(type,from,to){
+  const r=dashRange();
+  vf={q:'',type:type==='All'?'All':type,heads:[],sub:'All',status:'All',by:'All',from:from===undefined?r.from:from,to:to===undefined?r.to:to,page:1,perPage:vf.perPage};
   navigate('vouchers');
 }
 
