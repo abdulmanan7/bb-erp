@@ -1657,22 +1657,23 @@ async function downloadPDF(elId,filename){
   const noprint=[...el.querySelectorAll('.noprint')].map(n=>[n,n.style.display]);
   noprint.forEach(([n])=>n.style.display='none');
   try{
-    // Clamp scale so the canvas stays under browser limits (~16384px) — a fully blank PDF otherwise
-    const scale=Math.max(0.6,Math.min(2,15000/Math.max(el.offsetHeight,1),15000/Math.max(el.offsetWidth,1)));
-    const canvas=await html2canvas(el,{scale,useCORS:true,logging:false,backgroundColor:'#fff'});
+    const scale=2;
     const{jsPDF}=window.jspdf;
     const pdf=new jsPDF('p','pt','a4');
     const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
-    const renderW=canvas.width/scale; // DOM px width as rendered
-    const pageDomH=ph*renderW/pw;    // DOM px that fit one PDF page
-    const totalDomH=canvas.height/scale;
+    const renderW=el.offsetWidth;          // DOM px width as rendered
+    const pageDomH=ph*renderW/pw;          // DOM px that fit one PDF page
+    const totalDomH=el.offsetHeight;
 
     // Element ranges (in DOM px, relative to the captured element) that must not be split
     const elRect=el.getBoundingClientRect();
+    const elDocTop=elRect.top+window.scrollY;
     const ranges=[...el.querySelectorAll('tr,img,h2,h3,h4,p,.s-card,.sign-row,.doc-header,.summary-cards')]
       .map(n=>{const r=n.getBoundingClientRect();return{top:r.top-elRect.top,bottom:r.bottom-elRect.top};});
 
-    let y=0,first=true;
+    // Page break points in DOM px
+    const breaks=[0];
+    let y=0;
     while(y<totalDomH-1){
       let end=Math.min(y+pageDomH,totalDomH);
       if(end<totalDomH){
@@ -1683,14 +1684,22 @@ async function downloadPDF(elId,filename){
         }
         if(safe>y+10)end=safe;
       }
-      const sh=Math.max(1,Math.round((end-y)*scale));
-      const page=document.createElement('canvas');
-      page.width=canvas.width;page.height=sh;
-      page.getContext('2d').drawImage(canvas,0,Math.round(y*scale),canvas.width,sh,0,0,canvas.width,sh);
-      if(!first)pdf.addPage();
-      pdf.addImage(page.toDataURL('image/png'),'PNG',0,0,pw,sh*pw/canvas.width);
-      first=false;
+      breaks.push(end);
       y=end;
+    }
+
+    // Capture each page slice separately — keeps 2x sharpness and stays far under canvas limits
+    for(let i=0;i<breaks.length-1;i++){
+      const y0=breaks[i],h=breaks[i+1]-y0;
+      let seg=await html2canvas(el,{scale,y:elDocTop+y0,height:h,useCORS:true,logging:false,backgroundColor:'#fff'});
+      if(seg.height>Math.ceil(h*scale)+8){ // crop unsupported — slice the full capture instead
+        const t=document.createElement('canvas');
+        t.width=seg.width;t.height=Math.ceil(h*scale);
+        t.getContext('2d').drawImage(seg,0,Math.round(y0*scale),seg.width,t.height,0,0,seg.width,t.height);
+        seg=t;
+      }
+      if(i>0)pdf.addPage();
+      pdf.addImage(seg.toDataURL('image/png'),'PNG',0,0,pw,h*pw/renderW);
     }
     pdf.save(filename||'Document.pdf');
     toast('PDF downloaded!');
@@ -1727,12 +1736,13 @@ function exportVoucherPdf(){
     const amt=money(v.paid!==undefined?v.paid:v.amount);
     const hint=v.status!=='paid'&&v.total?`<div style="font-size:9.5px;color:#888">of ${money(v.total)}</div>`:'';
     const isIn=v.type==='Receipt';
-    return `<tr><td style="white-space:nowrap">${dateStr(v.date)}</td><td><strong>${esc(v.no)}</strong></td><td>${headLabel(v)}</td><td>${esc(v.party||'—')}</td><td style="font-size:11.5px;color:#666">${esc(v.description||'—')}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:#1e8449">${isIn?amt+hint:''}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:#c0392b">${isIn?'':amt+hint}</td><td>${vStatusBadge(v)}</td></tr>`;
+    return `<tr><td style="white-space:nowrap">${dateStr(v.date)}</td><td><strong>${esc(v.no)}</strong></td><td>${headLabel(v)}</td><td>${esc(v.party||'—')}</td><td style="font-size:11.5px;color:#666">${esc(v.description||'—')}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:#1e8449">${isIn?amt+hint:''}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:#c0392b">${isIn?'':amt+hint}</td></tr>`;
   }).join('');
   const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
   const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
-  const foot=`<tr><td colspan="5" style="text-align:right;font-weight:800">TOTAL</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:#1e8449">${money(inc)}</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:#c0392b">${money(exp)}</td><td style="white-space:nowrap;font-weight:700;color:${inc-exp>=0?'#1e8449':'#c0392b'}">Balance ${money(inc-exp)}</td></tr>`;
-  listingPdf('Voucher Register',sub,'<th>Date</th><th>No.</th><th>Head</th><th>Party</th><th>Description</th><th style="text-align:right">Cash In</th><th style="text-align:right">Cash Out</th><th>Status</th>',body,foot,`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`);
+  const foot=`<tr><td colspan="5" style="text-align:right;font-weight:800">TOTAL</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:#1e8449">${money(inc)}</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:#c0392b">${money(exp)}</td></tr>
+    <tr><td colspan="5" style="text-align:right;font-weight:800">BALANCE</td><td colspan="2" style="text-align:right;font-weight:800;white-space:nowrap;color:${inc-exp>=0?'#1e8449':'#c0392b'}">${money(inc-exp)}</td></tr>`;
+  listingPdf('Voucher Register',sub,'<th>Date</th><th>No.</th><th>Head</th><th>Party</th><th>Description</th><th style="text-align:right">Cash In</th><th style="text-align:right">Cash Out</th>',body,foot,`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`);
 }
 
 function exportSalaryPdf(){
