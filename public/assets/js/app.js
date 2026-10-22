@@ -1368,6 +1368,7 @@ function renderReportsPage(){
         <div id="repFromWrap" style="display:none"><label>From</label><input type="date" id="repFrom"></div>
         <div id="repToWrap" style="display:none"><label>To</label><input type="date" id="repTo"></div>
         <div><label>Type</label><select id="repType"><option>All</option><option value="Expense">Cash Out</option><option value="Income">Cash In</option></select></div>
+        <div><label>Created By</label><select id="repBy"><option>All</option>${[...new Set(db.vouchers.map(v=>v.createdBy).filter(Boolean))].sort().map(c=>`<option>${c}</option>`).join('')}</select></div>
         <div style="flex:2;min-width:220px"><label>Heads</label>
           <div class="ms-wrap">
             <button type="button" class="ms-btn" onclick="repHeadToggle()">
@@ -1461,12 +1462,14 @@ function generateReport(){
   else{from=new Date(document.getElementById('repFrom').value);to=new Date(document.getElementById('repTo').value);if(!from.getTime()||!to.getTime()){toast('Select both dates.','warn');return;}}
   const fromStr=from.toISOString().slice(0,10),toStr=to.toISOString().slice(0,10);
   const repType=document.getElementById('repType').value;
+  const repBy=document.getElementById('repBy').value;
   const repHeads=[...document.querySelectorAll('.repHeadChk:checked')].map(c=>c.value);
   const repSubs=new Set([...document.querySelectorAll('.repSubChk:checked')].map(c=>c.value));
   const subChkCount=document.querySelectorAll('.repSubChk').length;
   let rows=db.vouchers.filter(v=>v.date>=fromStr&&v.date<=toStr);
   if(repType==='Expense')rows=rows.filter(v=>v.type==='Payment');
   if(repType==='Income')rows=rows.filter(v=>v.type==='Receipt');
+  if(repBy!=='All')rows=rows.filter(v=>v.createdBy===repBy);
   if(repHeads.length&&repHeads.length<db.heads.length)rows=rows.filter(v=>repHeads.includes(v.headId));
   if(repSubs.size<subChkCount)rows=rows.filter(v=>!v.subHeadId||repSubs.has(v.subHeadId));
   rows=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
@@ -1719,10 +1722,16 @@ function listingPdf(title,subtitle,thead,bodyHtml,tfootHtml,filename){
 function exportVoucherPdf(){
   const rows=filteredVouchers();
   const sub=`Type: ${vf.type} • Status: ${vf.status} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.heads.length?` • Heads: ${esc(vfHeadsLabel())}`:''}${vf.by!=='All'?` • By: ${esc(vf.by)}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
-  const body=rows.map(v=>`<tr><td style="white-space:nowrap">${dateStr(v.date)}</td><td><strong>${esc(v.no)}</strong></td><td>${headLabel(v)}</td><td>${v.type}</td><td>${esc(v.party||'—')}</td><td style="font-size:12px;color:#666">${esc(v.description||'—')}</td><td style="text-align:right;font-weight:600;white-space:nowrap">${money(v.amount)}</td><td>${vStatusBadge(v)}</td></tr>`).join('');
-  const paid=rows.reduce((s,v)=>s+v.paid,0),tot=rows.reduce((s,v)=>s+v.total,0);
-  const foot=`<tr><td colspan="6" style="text-align:right;font-weight:800">TOTALS — Paid ${money(paid)} of ${money(tot)} billed</td><td style="text-align:right;font-weight:800;white-space:nowrap">${money(paid)}</td><td></td></tr>`;
-  listingPdf('Voucher Register',sub,'<th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Party</th><th>Description</th><th style="text-align:right">Amount</th><th>Status</th>',body,foot,`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`);
+  const body=rows.map(v=>{
+    const amt=money(v.paid!==undefined?v.paid:v.amount);
+    const hint=v.status!=='paid'&&v.total?`<div style="font-size:9.5px;color:#888">of ${money(v.total)}</div>`:'';
+    const isIn=v.type==='Receipt';
+    return `<tr><td style="white-space:nowrap">${dateStr(v.date)}</td><td><strong>${esc(v.no)}</strong></td><td>${headLabel(v)}</td><td>${esc(v.party||'—')}</td><td style="font-size:12px;color:#666">${esc(v.description||'—')}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:var(--success)">${isIn?amt+hint:''}</td><td style="text-align:right;font-weight:600;white-space:nowrap;color:var(--danger)">${isIn?'':amt+hint}</td><td>${vStatusBadge(v)}</td></tr>`;
+  }).join('');
+  const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
+  const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
+  const foot=`<tr><td colspan="5" style="text-align:right;font-weight:800">TOTAL</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:var(--success)">${money(inc)}</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:var(--danger)">${money(exp)}</td><td style="white-space:nowrap;font-weight:700;color:${inc-exp>=0?'var(--success)':'var(--danger)'}">Balance ${money(inc-exp)}</td></tr>`;
+  listingPdf('Voucher Register',sub,'<th>Date</th><th>No.</th><th>Head</th><th>Party</th><th>Description</th><th style="text-align:right">Cash In</th><th style="text-align:right">Cash Out</th><th>Status</th>',body,foot,`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`);
 }
 
 function exportSalaryPdf(){
