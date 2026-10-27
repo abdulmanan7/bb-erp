@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\Attachments;
 use App\Models\EmployeeModel;
 use App\Models\HeadModel;
 use App\Models\SalarySlipModel;
@@ -248,8 +249,6 @@ class Salary extends BaseApiController
     private function removeVoucher(string $voucherId): void
     {
         (new VoucherModel())->delete($voucherId);
-        foreach (glob(WRITEPATH . 'uploads/vouchers/' . $voucherId . '.*') ?: [] as $f) {
-            @unlink($f);
-        }
+        Attachments::delete('vouchers', $voucherId);
     }
 }

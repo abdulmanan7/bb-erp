@@ -33,7 +33,7 @@ function defaultSettings(){
     primary:'#0b2e4f',secondary:'#e0952e',adminUser:'BBAccounts',currency:'Rs',taxRate:0,
     invoiceFooter:'Thank you for your business!'};
 }
-let db={settings:defaultSettings(),employees:[],heads:[],vouchers:[],invoices:[],salary:[]};
+let db={settings:defaultSettings(),employees:[],heads:[],vouchers:[],spendings:[],projects:[],invoices:[],salary:[]};
 
 /* ── SESSION ── */
 let session=null;
@@ -131,6 +131,7 @@ function shell(content){
     {r:'dashboard',icon:'<i class="fa-solid fa-gauge-high"></i>',label:'Dashboard',sec:'MAIN'},
     {r:'heads',icon:'<i class="fa-solid fa-folder-tree"></i>',label:'Account Heads',sec:'ACCOUNTING'},
     {r:'vouchers',icon:'<i class="fa-solid fa-receipt"></i>',label:'Vouchers'},
+    {r:'spending',icon:'<i class="fa-solid fa-wallet"></i>',label:'Spending'},
     {r:'invoices',icon:'<i class="fa-solid fa-file-invoice"></i>',label:'Invoices'},
     {r:'reports',icon:'<i class="fa-solid fa-chart-line"></i>',label:'Reports'},
     {r:'employees',icon:'<i class="fa-solid fa-users"></i>',label:'Employees',sec:'HR'},
@@ -141,7 +142,7 @@ function shell(content){
     {r:'announcements',icon:'<i class="fa-solid fa-bullhorn"></i>',label:'Announcements',sec:'COMMUNICATION'},
     {r:'settings',icon:'<i class="fa-solid fa-gear"></i>',label:'Settings',sec:'SYSTEM'},
   ];
-  const navEmp=[{r:'add',icon:'<i class="fa-solid fa-circle-plus"></i>',label:'Add Entry',sec:'ENTRIES'},{r:'mine',icon:'<i class="fa-solid fa-clipboard-list"></i>',label:'My Entries'}];
+  const navEmp=[{r:'add',icon:'<i class="fa-solid fa-circle-plus"></i>',label:'Add Entry',sec:'ENTRIES'},{r:'mine',icon:'<i class="fa-solid fa-clipboard-list"></i>',label:'My Entries'},{r:'spending',icon:'<i class="fa-solid fa-wallet"></i>',label:'Spending'}];
   const nav=session.role==='admin'?navAdmin:navEmp;
   let lastSec='';
   const navHtml=nav.map(item=>{
@@ -163,7 +164,7 @@ function shell(content){
   </div>`;
 }
 
-const ROUTES={admin:['dashboard','heads','employees','vouchers','invoices','salary','reports','settings','projects','attendance','leaves','announcements'],staff:['add','mine']};
+const ROUTES={admin:['dashboard','heads','employees','vouchers','spending','invoices','salary','reports','settings','projects','attendance','leaves','announcements'],staff:['add','mine','spending']};
 function defaultPage(role){return role==='admin'?'dashboard':'add';}
 function routeFromUrl(){
   const seg=location.pathname.split('/').filter(Boolean).pop();
@@ -715,6 +716,209 @@ function renderVouchersPage(){
       <tfoot id="vouchFoot">${vouchFootHtml(rows)}</tfoot>
     </table></div>
     <div class="pager" id="vouchPager">${vouchPagerHtml(rows.length,pages)}</div>`);
+}
+
+/* ═══════════════════════════════════════════════════
+   SPENDING — staff advances & project spending (kept apart from vouchers)
+═══════════════════════════════════════════════════ */
+let spf={q:'',kind:'All',employee:'All',project:'All',from:'',to:''};
+
+function spEmpName(id){return (db.employees.find(e=>e.id===id)||{}).name||'—';}
+function spProjName(id){return (db.projects.find(p=>p.id===id)||{}).name||'—';}
+function spHeadText(s){
+  if(s.kind!=='spend')return '';
+  const h=db.heads.find(x=>x.id===s.headId);
+  const sub=(db.subHeads||[]).find(x=>x.id===s.subHeadId);
+  return h?h.name+(sub?' → '+sub.name:''):'';
+}
+function spKindLabel(k){return k==='advance'?'Advance':'Spending';}
+function spSet(k,v){spf[k]=v;render();}
+function spReset(){spf={q:'',kind:'All',employee:'All',project:'All',from:'',to:''};render();}
+
+function spendingRows(){
+  const q=spf.q.toLowerCase();
+  return db.spendings.filter(s=>
+    (spf.kind==='All'||s.kind===spf.kind)&&
+    (spf.employee==='All'||s.employeeId===spf.employee)&&
+    (spf.project==='All'||s.projectId===spf.project)&&
+    (!spf.from||s.date>=spf.from)&&(!spf.to||s.date<=spf.to)&&
+    (!q||`${spEmpName(s.employeeId)} ${spProjName(s.projectId)} ${s.party} ${s.description}`.toLowerCase().includes(q))
+  ).sort((a,b)=>b.date.localeCompare(a.date));
+}
+
+function spTotals(rows){
+  const advance=rows.filter(s=>s.kind==='advance').reduce((t,s)=>t+s.amount,0);
+  const spent=rows.filter(s=>s.kind==='spend').reduce((t,s)=>t+s.amount,0);
+  return {advance,spent,balance:advance-spent};
+}
+
+function spGroup(rows,key){
+  const g={};
+  rows.forEach(s=>{g[s[key]]=g[s[key]]||{advance:0,spend:0};g[s[key]][s.kind]+=s.amount;});
+  return Object.entries(g).map(([id,t])=>({id,...t,balance:t.advance-t.spend})).sort((a,b)=>b.spend-a.spend);
+}
+
+function spReportTable(title,firstCol,groups,nameOf){
+  const t=groups.reduce((a,g)=>({advance:a.advance+g.advance,spend:a.spend+g.spend,balance:a.balance+g.balance}),{advance:0,spend:0,balance:0});
+  const balColor=b=>b<0?'#c0392b':'#1e8449';
+  return `<div style="overflow-x:auto"><div style="font-weight:700;color:var(--primary);margin:0 0 8px">${title}</div>
+    <table class="list-table"><thead><tr><th>${firstCol}</th><th style="text-align:right">Advances</th><th style="text-align:right">Spent</th><th style="text-align:right">Balance</th></tr></thead>
+    <tbody>${groups.map(g=>`<tr><td>${esc(nameOf(g.id))}</td><td style="text-align:right">${money(g.advance)}</td><td style="text-align:right">${money(g.spend)}</td><td style="text-align:right;font-weight:700;color:${balColor(g.balance)}">${money(g.balance)}</td></tr>`).join('')||'<tr class="empty-row"><td colspan="4">No entries for the current filters.</td></tr>'}</tbody>
+    ${groups.length?`<tfoot><tr style="background:#f7f9fc"><td style="font-weight:800;padding:10px 14px">TOTAL</td><td style="text-align:right;font-weight:800">${money(t.advance)}</td><td style="text-align:right;font-weight:800">${money(t.spent)}</td><td style="text-align:right;font-weight:800;color:${balColor(t.balance)}">${money(t.balance)}</td></tr></tfoot>`:''}</table></div>`;
+}
+
+function spendingRowHtml(s){
+  const admin=session.role==='admin';
+  const actions=`${s.attachment?`<a class="link-btn" href="${API_BASE}spendings/${s.id}/attachment" target="_blank" title="${esc(s.attachment)}"><i class="fa-solid fa-paperclip"></i></a> `:''}${admin?`<button class="link-btn" onclick="spendingForm('${s.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteSpending('${s.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>`:''}`;
+  return `<tr><td style="white-space:nowrap">${dateStr(s.date)}</td>${admin?`<td>${esc(spEmpName(s.employeeId))}</td>`:''}
+    <td>${s.kind==='advance'?'<span class="badge badge-income">Advance</span>':'<span class="badge badge-expense">Spending</span>'}</td>
+    <td>${esc(spProjName(s.projectId))}</td><td>${s.kind==='spend'?headLabel(s):'—'}</td><td>${esc(s.party)||'—'}</td>
+    <td style="color:#666;font-size:13px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.description)||'—'}</td>
+    <td style="text-align:right;white-space:nowrap"><strong>${money(s.amount)}</strong></td><td style="white-space:nowrap">${actions}</td></tr>`;
+}
+
+function renderSpendingPage(){
+  const admin=session.role==='admin';
+  const rows=spendingRows();
+  const t=spTotals(rows);
+  const card=(cls,label,val,note)=>`<div class="s-card ${cls}" style="padding:13px 16px">
+    <div class="label">${label}</div><div class="value" style="font-size:17px;margin-top:4px">${val}</div>
+    <div style="font-size:11px;color:#8896a6;margin-top:3px">${note}</div></div>`;
+  const cols=['Date',...(admin?['Employee']:[]),'Type','Project','Head','Party','Description','Amount',''];
+  const empOpts=db.employees.map(e=>`<option value="${e.id}" ${spf.employee===e.id?'selected':''}>${esc(e.name)}</option>`).join('');
+  const projOpts=db.projects.map(p=>`<option value="${p.id}" ${spf.project===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
+  return shell(`
+    <div class="page-header"><h2><i class="fa-solid fa-wallet"></i> Spending</h2><button class="btn-primary" onclick="spendingForm()"><i class="fa-solid fa-plus"></i> New Entry</button></div>
+    <div class="page-title-bar" style="padding:14px 18px">
+      <div class="row-inline" style="width:100%;align-items:flex-end">
+        <div style="flex:2.2;min-width:170px"><label>Search</label><input id="spQ" placeholder="Employee, project, party…" value="${esc(spf.q)}" oninput="spSet('q',this.value)"></div>
+        <div style="min-width:120px"><label>Type</label><select onchange="spSet('kind',this.value)">
+          <option value="All" ${spf.kind==='All'?'selected':''}>All</option><option value="advance" ${spf.kind==='advance'?'selected':''}>Advance</option><option value="spend" ${spf.kind==='spend'?'selected':''}>Spending</option></select></div>
+        ${admin?`<div style="min-width:150px"><label>Employee</label><select onchange="spSet('employee',this.value)"><option value="All" ${spf.employee==='All'?'selected':''}>All</option>${empOpts}</select></div>`:''}
+        <div style="min-width:170px"><label>Project</label><select onchange="spSet('project',this.value)"><option value="All" ${spf.project==='All'?'selected':''}>All</option>${projOpts}</select></div>
+        <div style="min-width:130px"><label>From</label><input type="date" value="${spf.from}" onchange="spSet('from',this.value)"></div>
+        <div style="min-width:130px"><label>To</label><input type="date" value="${spf.to}" onchange="spSet('to',this.value)"></div>
+        <div style="flex:0;min-width:auto;display:flex;gap:8px"><button class="btn-secondary" onclick="exportSpendingPdf()"><i class="fa-solid fa-file-pdf"></i> PDF</button><button class="btn-secondary" onclick="exportSpendingCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button><button class="btn-secondary" onclick="spReset()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
+      </div>
+    </div>
+    <div class="summary-cards" style="gap:10px;margin-bottom:14px">
+      ${card('income','Advances Given',money(t.advance),`${rows.filter(s=>s.kind==='advance').length} entries`)}
+      ${card('expense','Spent',money(t.spent),`${rows.filter(s=>s.kind==='spend').length} entries`)}
+      ${card(t.balance<0?'expense':'net','Balance',money(t.balance),'Advances − spent')}
+    </div>
+    <h3 style="margin:18px 0 8px;color:var(--primary)">History</h3>
+    <div style="overflow-x:auto"><table class="list-table">
+      <thead><tr>${cols.map(c=>`<th${c==='Amount'?' style="text-align:right"':''}>${c}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(spendingRowHtml).join('')||`<tr class="empty-row"><td colspan="${cols.length}">No entries match the filters.</td></tr>`}</tbody>
+    </table></div>
+    <h3 style="margin:22px 0 8px;color:var(--primary)">Report</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px">
+      ${admin?spReportTable('By Employee','Employee',spGroup(rows,'employeeId'),spEmpName):''}
+      ${spReportTable('By Project','Project',spGroup(rows,'projectId'),spProjName)}
+    </div>`);
+}
+
+function spendingForm(id){
+  const editing=id?db.spendings.find(x=>x.id===id):null;
+  const admin=session.role==='admin';
+  const kind=editing?.kind||'spend';
+  const assigned=currentEmployee()?.assignedHeads||[];
+  const heads=db.heads.filter(h=>h.type==='Expense'&&(admin||assigned.includes(h.id)));
+  const projects=db.projects.filter(p=>p.status==='active'||p.id===editing?.projectId);
+  if(!projects.length){toast('No active projects assigned. Contact admin.','warn');return;}
+  const empOpts=db.employees.map(e=>`<option value="${e.id}" ${editing?.employeeId===e.id?'selected':''}>${esc(e.name)}</option>`).join('');
+  const projOpts=projects.map(p=>`<option value="${p.id}" ${editing?.projectId===p.id?'selected':''}>${esc(p.name)}${p.status==='active'?'':' (inactive)'}</option>`).join('');
+  const headOpts=heads.map(h=>`<option value="${h.id}" ${editing?.headId===h.id?'selected':''}>${esc(h.name)}</option>`).join('');
+  showModal(`<div class="modal-header"><h3>${id?'Edit':'New'} Spending Entry</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
+    <form onsubmit="saveSpending(event,'${id||''}')">
+      <label>Entry Type *</label><select id="spKind" onchange="spKindSync()">
+        <option value="spend" ${kind==='spend'?'selected':''}>Spending — money spent for a project</option>
+        <option value="advance" ${kind==='advance'?'selected':''}>Advance — money given to employee</option></select>
+      ${admin?`<label>Employee *</label><select id="spEmp" required>${empOpts}</select>`:''}
+      <label>Project *</label><select id="spProj" required>${projOpts}</select>
+      <div id="spHeadWrap" class="row-inline">
+        <div><label>Account Head *</label><select id="spHead" onchange="spHeadSync()"><option value="">— Select head —</option>${headOpts}</select></div>
+        <div id="spSubWrap" style="display:none"><label>Sub-Head *</label><select id="spSub"></select></div>
+      </div>
+      <div class="row-inline">
+        <div><label>Date *</label><input type="date" id="spDate" value="${editing?.date||new Date().toISOString().slice(0,10)}" required></div>
+        <div><label>Amount (PKR) *</label><input type="number" id="spAmount" min="1" value="${editing?.amount||''}" placeholder="0" required></div>
+      </div>
+      <label id="spPartyLabel">Paid To</label>
+      <input id="spParty" value="${esc(editing?.party||'')}" placeholder="Person or company name">
+      <label>Description / Narration</label>
+      <textarea id="spDesc" placeholder="Details about this entry">${esc(editing?.description||'')}</textarea>
+      <label>Attachment (image or PDF, max 5 MB)</label>
+      <input type="file" id="spAttach" accept="image/*,.pdf">
+      ${editing?.attachment?`<p style="font-size:13px;margin-top:6px"><i class="fa-solid fa-paperclip"></i> <a href="${API_BASE}spendings/${id}/attachment" target="_blank">${esc(editing.attachment)}</a>
+        &nbsp;<label style="display:inline;font-weight:400;text-transform:none;letter-spacing:0;margin:0"><input type="checkbox" id="spAttachRemove" style="margin:0 4px 0 0"> Remove</label></p>`:''}
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Entry</button>
+      </div>
+    </form>`);
+  spKindSync(editing?.subHeadId||'');
+}
+
+function spKindSync(pre=''){
+  const spend=document.getElementById('spKind').value==='spend';
+  document.getElementById('spHeadWrap').style.display=spend?'':'none';
+  document.getElementById('spHead').required=spend;
+  document.getElementById('spPartyLabel').textContent=spend?'Paid To':'Given By';
+  spHeadSync(pre);
+}
+
+function spHeadSync(pre=''){
+  const headId=document.getElementById('spHead').value;
+  const subs=(db.subHeads||[]).filter(s=>s.headId===headId);
+  const show=subs.length>0&&document.getElementById('spKind').value==='spend';
+  const wrap=document.getElementById('spSubWrap'),sel=document.getElementById('spSub');
+  wrap.style.display=show?'block':'none';
+  sel.required=show;
+  sel.innerHTML=`<option value="">— Select sub-head —</option>`+subs.map(s=>`<option value="${s.id}" ${s.id===pre?'selected':''}>${esc(s.name)}</option>`).join('');
+}
+
+async function saveSpending(e,id){
+  e.preventDefault();
+  const kind=document.getElementById('spKind').value;
+  const amount=Number(document.getElementById('spAmount').value||0);
+  if(amount<=0){toast('Amount must be greater than zero.','warn');return;}
+  const spend=kind==='spend';
+  const data={kind,employeeId:document.getElementById('spEmp')?.value,projectId:document.getElementById('spProj').value,
+    headId:spend?document.getElementById('spHead').value:'',subHeadId:spend?document.getElementById('spSub').value:'',
+    date:document.getElementById('spDate').value,amount,
+    party:document.getElementById('spParty').value.trim(),description:document.getElementById('spDesc').value.trim()};
+  const file=document.getElementById('spAttach').files[0];
+  if(file){
+    if(file.size>5*1024*1024){toast('Attachment too large (max 5 MB).','warn');return;}
+    data.attachment={name:file.name,data:await readFileData(file)};
+  }
+  if(document.getElementById('spAttachRemove')?.checked)data.removeAttachment=true;
+  if(!await api('spendings'+(id?'/'+id:''),id?'PUT':'POST',data))return;
+  await loadState();closeModal();render();toast('Spending entry saved!');
+}
+
+async function deleteSpending(id){
+  if(!confirm('Delete this spending entry?'))return;
+  if(!await api('spendings/'+id,'DELETE'))return;
+  await loadState();render();toast('Entry deleted.','warn');
+}
+
+function exportSpendingCsv(){
+  const rows=spendingRows().map(s=>({Date:s.date,Employee:spEmpName(s.employeeId),Type:spKindLabel(s.kind),
+    Project:spProjName(s.projectId),Head:spHeadText(s),Party:s.party,Description:s.description,Amount:s.amount}));
+  csvDownload(`spending-${spf.from||'all'}-to-${spf.to||'now'}.csv`,rows);
+}
+
+function exportSpendingPdf(){
+  const rows=spendingRows();
+  const admin=session.role==='admin';
+  const sub=`Type: ${spf.kind==='All'?'All':spKindLabel(spf.kind)} • Range: ${spf.from||'start'} → ${spf.to||'today'}${spf.q?` • Search: "${esc(spf.q)}"`:''}`;
+  const cols=['Date',...(admin?['Employee']:[]),'Type','Project','Head','Party','Description','Amount'];
+  const body=rows.map(s=>`<tr><td style="white-space:nowrap">${dateStr(s.date)}</td>${admin?`<td>${esc(spEmpName(s.employeeId))}</td>`:''}<td>${spKindLabel(s.kind)}</td><td>${esc(spProjName(s.projectId))}</td><td>${esc(spHeadText(s))}</td><td>${esc(s.party)}</td><td style="font-size:12px;color:#666">${esc(s.description)}</td><td style="text-align:right;font-weight:700;white-space:nowrap">${money(s.amount)}</td></tr>`).join('');
+  const t=spTotals(rows);
+  const foot=`<tr><td colspan="${cols.length-1}" style="text-align:right;font-weight:800">ADVANCES ${money(t.advance)} • SPENT ${money(t.spent)} • BALANCE</td><td style="text-align:right;font-weight:800;white-space:nowrap;color:${t.balance<0?'#c0392b':'#1e8449'}">${money(t.balance)}</td></tr>`;
+  listingPdf('Spending Register',sub,cols.map(c=>`<th${c==='Amount'?' style="text-align:right"':''}>${c}</th>`).join(''),body,foot,`spending-${spf.from||'all'}-to-${spf.to||'now'}`);
 }
 
 function renderAddPage(){
@@ -1888,7 +2092,7 @@ function render(){
   const fid=ae&&ae.id?ae.id:null;
   const pos=fid&&'selectionStart' in ae?ae.selectionStart:null;
   if(!session){app.innerHTML=renderLogin();return;}
-  const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage,projects:renderProjectsPage,attendance:renderAttendancePage,leaves:renderLeavesPage,announcements:renderAnnouncementsPage};
+  const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,spending:renderSpendingPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage,projects:renderProjectsPage,attendance:renderAttendancePage,leaves:renderLeavesPage,announcements:renderAnnouncementsPage};
   if(REMOTE_LOADERS[route])ensureRemote(route);
   app.innerHTML=(pages[route]||renderDashboard)();
   if(route==='dashboard')setTimeout(drawDashChart,0);

@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\Attachments;
 use App\Models\EmployeeModel;
 use App\Models\HeadModel;
 use App\Models\SubHeadModel;
@@ -11,9 +12,6 @@ use CodeIgniter\HTTP\ResponseInterface;
 
 class Vouchers extends BaseApiController
 {
-    private const ALLOWED_EXT  = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'];
-    private const MAX_SIZE     = 5 * 1024 * 1024; // 5 MB after base64 decode
-
     public function create(): ResponseInterface
     {
         $b = $this->body();
@@ -44,7 +42,7 @@ class Vouchers extends BaseApiController
 
         $m = new VoucherModel();
         $id = $this->newId();
-        $file = $this->saveAttachment($id, $b['attachment'] ?? null);
+        $file = Attachments::save('vouchers', $id, $b['attachment'] ?? null);
         if (is_string($file)) {
             return $this->fail($file);
         }
@@ -100,10 +98,10 @@ class Vouchers extends BaseApiController
 
         $attachment = $existing['attachment'];
         if (! empty($b['removeAttachment'])) {
-            $this->deleteAttachmentFile($id);
+            Attachments::delete('vouchers', $id);
             $attachment = '';
         }
-        $file = $this->saveAttachment($id, $b['attachment'] ?? null);
+        $file = Attachments::save('vouchers', $id, $b['attachment'] ?? null);
         if (is_string($file)) {
             return $this->fail($file);
         }
@@ -135,7 +133,7 @@ class Vouchers extends BaseApiController
         }
         $m->delete($id);
         (new VoucherPaymentModel())->where('voucher_id', $id)->delete();
-        $this->deleteAttachmentFile($id);
+        Attachments::delete('vouchers', $id);
         return $this->json(['ok' => true]);
     }
 
@@ -259,63 +257,14 @@ class Vouchers extends BaseApiController
             return $this->fail('Access denied.', 403);
         }
 
-        $files = glob($this->attachmentPath($id) . '.*');
-        if (empty($files) || ! is_file($files[0])) {
+        $path = Attachments::file('vouchers', $id);
+        if ($path === null) {
             return $this->fail('Attachment file missing.', 404);
         }
-        $path = $files[0];
-
-        $ext = strtolower(pathinfo($v['attachment'], PATHINFO_EXTENSION));
-        $mime = $ext === 'pdf' ? 'application/pdf' : 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext);
 
         return $this->response
-            ->setHeader('Content-Type', $mime)
+            ->setHeader('Content-Type', Attachments::mime($v['attachment']))
             ->setHeader('Content-Disposition', 'inline; filename="' . basename($v['attachment']) . '"')
             ->setBody(file_get_contents($path));
-    }
-
-    /**
-     * Saves an uploaded attachment sent as {name, data} (data = base64 data URL).
-     * Returns true on save, null when nothing was sent, or an error string.
-     */
-    private function saveAttachment(string $voucherId, $attachment)
-    {
-        if (! is_array($attachment) || empty($attachment['data'])) {
-            return null;
-        }
-
-        $data = (string) $attachment['data'];
-        if (str_starts_with($data, 'data:')) {
-            $data = substr($data, strpos($data, ',') + 1);
-        }
-        $binary = base64_decode($data, true);
-        if ($binary === false || strlen($binary) > self::MAX_SIZE) {
-            return 'Attachment too large (max 5 MB).';
-        }
-
-        $ext = strtolower(pathinfo((string) ($attachment['name'] ?? ''), PATHINFO_EXTENSION));
-        if (! in_array($ext, self::ALLOWED_EXT, true)) {
-            return 'Only images and PDF files are allowed.';
-        }
-
-        $dir = WRITEPATH . 'uploads/vouchers';
-        if (! is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
-        $this->deleteAttachmentFile($voucherId);
-        file_put_contents($this->attachmentPath($voucherId, $ext), $binary);
-        return true;
-    }
-
-    private function attachmentPath(string $voucherId, string $ext = ''): string
-    {
-        return WRITEPATH . 'uploads/vouchers/' . $voucherId . ($ext !== '' ? '.' . $ext : '');
-    }
-
-    private function deleteAttachmentFile(string $voucherId): void
-    {
-        foreach (glob($this->attachmentPath($voucherId) . '.*') ?: [] as $f) {
-            @unlink($f);
-        }
     }
 }

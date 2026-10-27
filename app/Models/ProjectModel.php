@@ -15,6 +15,11 @@ class ProjectModel extends Model
         'radius_m', 'timezone', 'status', 'created_at', 'updated_at',
     ];
 
+    public function allMapped(): array
+    {
+        return array_map([self::class, 'map'], $this->orderBy('name', 'ASC')->findAll());
+    }
+
     public static function map(array $r): array
     {
         return [

@@ -5,8 +5,11 @@ namespace App\Controllers\Api;
 use App\Models\EmployeeModel;
 use App\Models\HeadModel;
 use App\Models\InvoiceModel;
+use App\Models\ProjectAssignmentModel;
+use App\Models\ProjectModel;
 use App\Models\SalarySlipModel;
 use App\Models\SettingModel;
+use App\Models\SpendingModel;
 use App\Models\SubHeadModel;
 use App\Models\VoucherModel;
 use App\Models\VoucherPaymentModel;
@@ -33,6 +36,8 @@ class State extends BaseApiController
                 'subHeads'  => (new SubHeadModel())->allMapped(),
                 'vouchers'  => $vouchers->allMapped(),
                 'voucherPayments' => (new VoucherPaymentModel())->allMapped(),
+                'spendings' => (new SpendingModel())->mappedFor(),
+                'projects'  => (new ProjectModel())->allMapped(),
                 'employees' => $employees->allMapped(),
                 'invoices'  => (new InvoiceModel())->allMapped(),
                 'salary'    => (new SalarySlipModel())->allMapped(),
@@ -67,6 +72,8 @@ class State extends BaseApiController
                     true
                 )
             )),
+            'spendings' => (new SpendingModel())->mappedFor($user['id'] ?? ''),
+            'projects'  => $emp ? array_map([ProjectModel::class, 'map'], (new ProjectAssignmentModel())->activeProjectsFor($emp['id'])) : [],
             'employees' => $emp ? [$employees->map($emp)] : [],
             'invoices'  => [],
             'salary'    => [],

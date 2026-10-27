@@ -32,6 +32,12 @@ $routes->group('api', static function (RouteCollection $routes) {
     $routes->put('vouchers/(:segment)', 'Api\Vouchers::update/$1', ['filter' => 'auth:admin']);
     $routes->delete('vouchers/(:segment)', 'Api\Vouchers::delete/$1', ['filter' => 'auth:admin']);
 
+    // Spending ledger — staff record advances and project spending, admin manages all
+    $routes->get('spendings/(:segment)/attachment', 'Api\Spendings::attachment/$1', ['filter' => 'auth']);
+    $routes->post('spendings', 'Api\Spendings::create', ['filter' => 'auth']);
+    $routes->put('spendings/(:segment)', 'Api\Spendings::update/$1', ['filter' => 'auth:admin']);
+    $routes->delete('spendings/(:segment)', 'Api\Spendings::delete/$1', ['filter' => 'auth:admin']);
+
     // Invoices — admin only
     $routes->post('invoices', 'Api\Invoices::create', ['filter' => 'auth:admin']);
     $routes->put('invoices/(:segment)', 'Api\Invoices::update/$1', ['filter' => 'auth:admin']);
