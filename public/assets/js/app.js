@@ -135,6 +135,10 @@ function shell(content){
     {r:'reports',icon:'<i class="fa-solid fa-chart-line"></i>',label:'Reports'},
     {r:'employees',icon:'<i class="fa-solid fa-users"></i>',label:'Employees',sec:'HR'},
     {r:'salary',icon:'<i class="fa-solid fa-money-bill-wave"></i>',label:'Salary Slips'},
+    {r:'leaves',icon:'<i class="fa-solid fa-calendar-check"></i>',label:'Leave Requests'},
+    {r:'projects',icon:'<i class="fa-solid fa-diagram-project"></i>',label:'Projects',sec:'FIELD'},
+    {r:'attendance',icon:'<i class="fa-solid fa-location-dot"></i>',label:'Live Attendance'},
+    {r:'announcements',icon:'<i class="fa-solid fa-bullhorn"></i>',label:'Announcements',sec:'COMMUNICATION'},
     {r:'settings',icon:'<i class="fa-solid fa-gear"></i>',label:'Settings',sec:'SYSTEM'},
   ];
   const navEmp=[{r:'add',icon:'<i class="fa-solid fa-circle-plus"></i>',label:'Add Entry',sec:'ENTRIES'},{r:'mine',icon:'<i class="fa-solid fa-clipboard-list"></i>',label:'My Entries'}];
@@ -159,7 +163,7 @@ function shell(content){
   </div>`;
 }
 
-const ROUTES={admin:['dashboard','heads','employees','vouchers','invoices','salary','reports','settings'],staff:['add','mine']};
+const ROUTES={admin:['dashboard','heads','employees','vouchers','invoices','salary','reports','settings','projects','attendance','leaves','announcements'],staff:['add','mine']};
 function defaultPage(role){return role==='admin'?'dashboard':'add';}
 function routeFromUrl(){
   const seg=location.pathname.split('/').filter(Boolean).pop();
@@ -172,7 +176,7 @@ function resolveRoute(role){
 function syncUrl(r,replace=true){
   try{history[replace?'replaceState':'pushState']({},'',r===defaultPage(session?.role)?'.':r);}catch(e){}
 }
-function navigate(r){route=r;syncUrl(r,false);sessionStorage.setItem('bb_route',r);render();}
+function navigate(r){route=r;syncUrl(r,false);sessionStorage.setItem('bb_route',r);if(REMOTE_LOADERS[r])invalidateRemote(r);render();}
 window.addEventListener('popstate',()=>{
   const r=routeFromUrl();
   if(r&&session&&ROUTES[session.role].includes(r)){route=r;sessionStorage.setItem('bb_route',r);render();}
@@ -1884,7 +1888,8 @@ function render(){
   const fid=ae&&ae.id?ae.id:null;
   const pos=fid&&'selectionStart' in ae?ae.selectionStart:null;
   if(!session){app.innerHTML=renderLogin();return;}
-  const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage};
+  const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage,projects:renderProjectsPage,attendance:renderAttendancePage,leaves:renderLeavesPage,announcements:renderAnnouncementsPage};
+  if(REMOTE_LOADERS[route])ensureRemote(route);
   app.innerHTML=(pages[route]||renderDashboard)();
   if(route==='dashboard')setTimeout(drawDashChart,0);
   if(fid){const el=document.getElementById(fid);if(el){el.focus();if(pos!==null)try{el.setSelectionRange(pos,pos);}catch(e){}}}

@@ -108,7 +108,7 @@ class Backup extends BaseApiController
             'employee_id' => '',
             'name'       => 'Admin',
             'username'   => $username,
-            'password'   => $this->isHashed($password) ? $password : password_hash($password, PASSWORD_DEFAULT),
+            'password'   => UserModel::isHashed($password) ? $password : password_hash($password, PASSWORD_DEFAULT),
             'type'       => 'admin',
             'created_at' => $this->now(),
         ]);
@@ -300,11 +300,6 @@ class Backup extends BaseApiController
         if ($password === '') {
             return '';
         }
-        return $this->isHashed($password) ? $password : password_hash($password, PASSWORD_DEFAULT);
-    }
-
-    private function isHashed(string $stored): bool
-    {
-        return str_starts_with($stored, '$2y$') || str_starts_with($stored, '$argon2');
+        return UserModel::isHashed($password) ? $password : password_hash($password, PASSWORD_DEFAULT);
     }
 }

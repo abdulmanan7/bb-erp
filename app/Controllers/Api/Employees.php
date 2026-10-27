@@ -3,6 +3,7 @@
 namespace App\Controllers\Api;
 
 use App\Models\EmployeeModel;
+use App\Models\MobileSessionModel;
 use App\Models\UserModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -114,6 +115,7 @@ class Employees extends BaseApiController
 
         if (! $enabled) {
             if ($existing) {
+                (new MobileSessionModel())->revokeForUser($existing['id']);
                 $users->delete($existing['id']);
             }
             return;
@@ -127,6 +129,9 @@ class Employees extends BaseApiController
         }
 
         if ($existing) {
+            if ($password !== '') {
+                (new MobileSessionModel())->revokeForUser($existing['id']);
+            }
             $users->update($existing['id'], $data);
         } else {
             $users->insert($data + [

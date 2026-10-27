@@ -24,6 +24,44 @@ class UserModel extends Model
         return $this->where('employee_id', $employeeId)->first();
     }
 
+    public static function isHashed(string $stored): bool
+    {
+        return str_starts_with($stored, '$2y$') || str_starts_with($stored, '$argon2');
+    }
+
+    /** Upgrades a legacy plain-text password to a hash on first successful login. */
+    public function rehashIfPlain(array $user, string $password): void
+    {
+        if (! self::isHashed((string) $user['password'])) {
+            $this->update($user['id'], ['password' => password_hash($password, PASSWORD_DEFAULT)]);
+        }
+    }
+
+    public static function passwordMatches(string $input, string $stored): bool
+    {
+        if ($stored === '') {
+            return false;
+        }
+        return self::isHashed($stored)
+            ? password_verify($input, $stored)
+            : hash_equals($stored, $input);
+    }
+
+    /** Session/token payload shared by cookie login and mobile login. */
+    public static function sessionPayload(array $user): array
+    {
+        $payload = [
+            'role'     => $user['type'] === 'admin' ? 'admin' : 'employee',
+            'uid'      => $user['id'],
+            'name'     => $user['name'],
+            'username' => $user['username'],
+        ];
+        if ($payload['role'] === 'employee') {
+            $payload['id'] = $user['employee_id'];
+        }
+        return $payload;
+    }
+
     public function usernameTaken(string $username, string $exceptId = ''): bool
     {
         $q = $this->where('username', $username);

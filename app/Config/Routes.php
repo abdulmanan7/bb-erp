@@ -44,6 +44,55 @@ $routes->group('api', static function (RouteCollection $routes) {
     $routes->put('salary/(:segment)', 'Api\Salary::update/$1', ['filter' => 'auth:admin']);
     $routes->delete('salary/(:segment)', 'Api\Salary::delete/$1', ['filter' => 'auth:admin']);
 
+    // Projects & assignments — admin only
+    $routes->get('projects', 'Api\Projects::index', ['filter' => 'auth:admin']);
+    $routes->post('projects', 'Api\Projects::create', ['filter' => 'auth:admin']);
+    $routes->put('projects/(:segment)', 'Api\Projects::update/$1', ['filter' => 'auth:admin']);
+    $routes->put('projects/(:segment)/assignments', 'Api\Projects::assign/$1', ['filter' => 'auth:admin']);
+
+    // Attendance monitoring — admin only
+    $routes->get('attendance/sessions', 'Api\AttendanceMonitor::sessions', ['filter' => 'auth:admin']);
+    $routes->get('attendance/sessions/(:segment)/track', 'Api\AttendanceMonitor::track/$1', ['filter' => 'auth:admin']);
+
+    // Leave requests & announcements — admin manages, employees read via the mobile API
+    $routes->get('leaves', 'Api\Leaves::index', ['filter' => 'auth:admin']);
+    $routes->post('leaves/(:segment)/review', 'Api\Leaves::review/$1', ['filter' => 'auth:admin']);
+    $routes->get('announcements', 'Api\Announcements::index', ['filter' => 'auth:admin']);
+    $routes->post('announcements', 'Api\Announcements::create', ['filter' => 'auth:admin']);
+    $routes->put('announcements/(:segment)', 'Api\Announcements::update/$1', ['filter' => 'auth:admin']);
+    $routes->post('announcements/(:segment)/publish', 'Api\Announcements::publish/$1', ['filter' => 'auth:admin']);
+
+    // Mobile app — employee bearer tokens (login/refresh/logout are public)
+    $routes->group('mobile', static function (RouteCollection $routes) {
+        $routes->post('login', 'Api\Mobile\Session::login');
+        $routes->post('refresh', 'Api\Mobile\Session::refresh');
+        $routes->post('logout', 'Api\Mobile\Session::logout');
+
+        $routes->get('config', 'Api\Mobile\Device::config', ['filter' => 'auth:employee']);
+        $routes->post('push-tokens', 'Api\Mobile\Device::registerPushToken', ['filter' => 'auth:employee']);
+        $routes->delete('push-tokens', 'Api\Mobile\Device::removePushToken', ['filter' => 'auth:employee']);
+
+        $routes->get('projects', 'Api\Mobile\Attendance::projects', ['filter' => 'auth:employee']);
+        $routes->get('attendance/status', 'Api\Mobile\Attendance::status', ['filter' => 'auth:employee']);
+        $routes->post('attendance/check-in', 'Api\Mobile\Attendance::checkIn', ['filter' => 'auth:employee']);
+        $routes->post('attendance/check-out', 'Api\Mobile\Attendance::checkOut', ['filter' => 'auth:employee']);
+        $routes->post('attendance/locations', 'Api\Mobile\Attendance::locations', ['filter' => 'auth:employee']);
+        $routes->get('attendance/history', 'Api\Mobile\Attendance::history', ['filter' => 'auth:employee']);
+        $routes->get('attendance/history/(:segment)', 'Api\Mobile\Attendance::historyDetail/$1', ['filter' => 'auth:employee']);
+
+        $routes->get('leave-types', 'Api\Mobile\Leaves::types', ['filter' => 'auth:employee']);
+        $routes->get('leaves', 'Api\Mobile\Leaves::index', ['filter' => 'auth:employee']);
+        $routes->post('leaves', 'Api\Mobile\Leaves::create', ['filter' => 'auth:employee']);
+        $routes->get('leaves/(:segment)', 'Api\Mobile\Leaves::show/$1', ['filter' => 'auth:employee']);
+        $routes->post('leaves/(:segment)/cancel', 'Api\Mobile\Leaves::cancel/$1', ['filter' => 'auth:employee']);
+
+        $routes->get('announcements', 'Api\Mobile\Announcements::index', ['filter' => 'auth:employee']);
+        $routes->get('announcements/(:segment)', 'Api\Mobile\Announcements::show/$1', ['filter' => 'auth:employee']);
+
+        $routes->get('notifications', 'Api\Mobile\Notifications::index', ['filter' => 'auth:employee']);
+        $routes->get('notifications/(:segment)', 'Api\Mobile\Notifications::show/$1', ['filter' => 'auth:employee']);
+    });
+
     // Settings / backup — admin only
     $routes->put('settings', 'Api\Settings::update', ['filter' => 'auth:admin']);
     $routes->get('backup', 'Api\Backup::export', ['filter' => 'auth:admin']);
