@@ -139,6 +139,7 @@ function shell(content){
     {r:'leaves',icon:'<i class="fa-solid fa-calendar-check"></i>',label:'Leave Requests'},
     {r:'projects',icon:'<i class="fa-solid fa-diagram-project"></i>',label:'Projects',sec:'FIELD'},
     {r:'attendance',icon:'<i class="fa-solid fa-location-dot"></i>',label:'Live Attendance'},
+    {r:'attreport',icon:'<i class="fa-solid fa-clock"></i>',label:'Attendance Report'},
     {r:'announcements',icon:'<i class="fa-solid fa-bullhorn"></i>',label:'Announcements',sec:'COMMUNICATION'},
     {r:'settings',icon:'<i class="fa-solid fa-gear"></i>',label:'Settings',sec:'SYSTEM'},
   ];
@@ -164,7 +165,7 @@ function shell(content){
   </div>`;
 }
 
-const ROUTES={admin:['dashboard','heads','employees','vouchers','spending','invoices','salary','reports','settings','projects','attendance','leaves','announcements'],staff:['add','mine','spending']};
+const ROUTES={admin:['dashboard','heads','employees','vouchers','spending','invoices','salary','reports','settings','projects','attendance','attreport','leaves','announcements'],staff:['add','mine','spending']};
 function defaultPage(role){return role==='admin'?'dashboard':'add';}
 function routeFromUrl(){
   const seg=location.pathname.split('/').filter(Boolean).pop();
@@ -2092,7 +2093,7 @@ function render(){
   const fid=ae&&ae.id?ae.id:null;
   const pos=fid&&'selectionStart' in ae?ae.selectionStart:null;
   if(!session){app.innerHTML=renderLogin();return;}
-  const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,spending:renderSpendingPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage,projects:renderProjectsPage,attendance:renderAttendancePage,leaves:renderLeavesPage,announcements:renderAnnouncementsPage};
+  const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,spending:renderSpendingPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage,projects:renderProjectsPage,attendance:renderAttendancePage,attreport:renderAttendanceReportPage,leaves:renderLeavesPage,announcements:renderAnnouncementsPage};
   if(REMOTE_LOADERS[route])ensureRemote(route);
   app.innerHTML=(pages[route]||renderDashboard)();
   if(route==='dashboard')setTimeout(drawDashChart,0);

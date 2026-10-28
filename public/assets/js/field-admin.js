@@ -9,7 +9,7 @@ const LOADING_ROW=(cols)=>`<tr class="empty-row"><td colspan="${cols}">Loading�
 const EMPTY_ROW=(cols,msg)=>`<tr class="empty-row"><td colspan="${cols}">${msg}</td></tr>`;
 
 const remotePages={};
-const REMOTE_LOADERS={projects:fetchProjects,attendance:fetchAttendance,leaves:fetchLeaves,announcements:fetchAnnouncements};
+const REMOTE_LOADERS={projects:fetchProjects,attendance:fetchAttendance,attreport:fetchAttendanceReport,leaves:fetchLeaves,announcements:fetchAnnouncements};
 
 function remoteSlot(r){return remotePages[r]||(remotePages[r]={data:null,stale:true,busy:false});}
 function invalidateRemote(r){remoteSlot(r).stale=true;}
@@ -257,6 +257,80 @@ async function trackSession(id){
     map.fitBounds(path,{padding:[30,30],maxZoom:17});
   }
   t.outOfBoundary.forEach(p=>L.circleMarker([p.latitude,p.longitude],{radius:6,color:'#c0392b'}).addTo(map));
+}
+
+/* ── ATTENDANCE REPORT ── */
+let arf={month:new Date().toISOString().slice(0,7),employeeId:''};
+
+async function fetchAttendanceReport(){
+  const params=new URLSearchParams({month:arf.month});
+  if(arf.employeeId){
+    params.set('employeeId',arf.employeeId);
+    return (await api('attendance/report?'+params))||{};
+  }
+  return (await api('attendance/report/summary?'+params))||{};
+}
+
+function setAttReport(key,value){arf[key]=value;invalidateRemote('attreport');render();}
+
+function renderAttendanceReportPage(){
+  const d=remoteSlot('attreport').data;
+  const emps=db.employees.map(e=>`<option value="${e.id}" ${arf.employeeId===e.id?'selected':''}>${esc(e.name)}</option>`).join('');
+  const body=d===null?'<p style="color:#8896a6">Loading…</p>':arf.employeeId?employeeReportHtml(d):summaryReportHtml(d);
+  return shell(`
+    <div class="page-header"><h2><i class="fa-solid fa-clock"></i> Attendance Report</h2>
+      <button class="btn-secondary" onclick="exportAttendanceReport()"><i class="fa-solid fa-file-csv"></i> Export CSV</button></div>
+    <div class="page-title-bar" style="padding:12px 18px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="month" value="${arf.month}" style="width:auto;margin-top:0" onchange="setAttReport('month',this.value)">
+      <select style="width:auto;min-width:240px;margin-top:0" onchange="setAttReport('employeeId',this.value)">
+        <option value="">All employees (monthly summary)</option>${emps}</select>
+      <span style="font-size:12px;color:#8896a6;margin-left:auto">On-site time = check-in to check-out, per project day</span></div></div>
+    ${body}`);
+}
+
+function summaryReportHtml(d){
+  const rows=d.employees||[];
+  const total=rows.reduce((t,r)=>({days:t.days+r.daysPresent,sessions:t.sessions+r.sessions,seconds:t.seconds+r.totalSeconds}),{days:0,sessions:0,seconds:0});
+  return `<table class="list-table"><thead><tr><th>Employee</th><th>Designation</th><th>Days present</th><th>Sessions</th><th>Total on site</th><th>Days with exceptions</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td><button class="link-btn" onclick="setAttReport('employeeId','${r.employeeId}')"><strong>${esc(r.name)}</strong></button></td>
+      <td>${esc(r.designation)||'—'}</td><td>${r.daysPresent}</td><td>${r.sessions}</td><td style="white-space:nowrap">${fmtDuration(r.totalSeconds)}</td><td>${r.daysWithExceptions}</td></tr>`).join('')||EMPTY_ROW(6,'No employees.')}</tbody>
+    ${rows.length?`<tfoot><tr style="background:#f7f9fc"><td colspan="2" style="font-weight:800;padding:10px 14px">TOTAL</td><td style="font-weight:800">${total.days}</td><td style="font-weight:800">${total.sessions}</td><td style="font-weight:800;white-space:nowrap">${fmtDuration(total.seconds)}</td><td></td></tr></tfoot>`:''}</table>`;
+}
+
+function employeeReportHtml(d){
+  if(!d.employee)return '<p style="color:#8896a6">Could not load this report.</p>';
+  const s=d.summary,tz=d.timezone;
+  const card=(label,value)=>`<div class="s-card net" style="padding:13px 16px"><div class="label">${label}</div><div class="value" style="font-size:17px;margin-top:4px">${value}</div></div>`;
+  const dayRows=d.days.map(x=>`<tr><td style="white-space:nowrap">${dateStr(x.date)}</td><td>${fmtTime(x.firstCheckIn,tz)}</td><td>${fmtTime(x.lastCheckOut,tz)}</td>
+    <td>${x.sessions}</td><td style="white-space:nowrap">${fmtDuration(x.totalSeconds)}</td>
+    <td>${x.exceptions.map(e=>`<span class="badge badge-warn" style="margin:1px">${esc(e)}</span>`).join('')||'—'}</td></tr>`).join('');
+  return `<h3 style="margin:16px 0 10px;color:var(--primary)">${esc(d.employee.name)}${d.employee.designation?` · ${esc(d.employee.designation)}`:''} — ${d.month}</h3>
+    <div class="summary-cards" style="gap:10px;margin-bottom:14px">
+      ${card('Days present',s.daysPresent)}${card('Sessions',s.sessions)}${card('Total on site',fmtDuration(s.totalSeconds))}${card('Total hours',s.totalHours.toFixed(2))}${card('Days with exceptions',s.daysWithExceptions)}
+    </div>
+    <table class="list-table"><thead><tr><th>Date</th><th>First check-in</th><th>Last check-out</th><th>Sessions</th><th>On site</th><th>Exceptions</th></tr></thead>
+    <tbody>${dayRows||EMPTY_ROW(6,'No attendance recorded this month.')}</tbody></table>`;
+}
+
+function exportAttendanceReport(){
+  const d=remoteSlot('attreport').data;
+  if(!d?.days&&!d?.employees)return;
+  let rows,name;
+  if(arf.employeeId){
+    rows=[['Date','First check-in','Last check-out','Sessions','On site (h)','Exceptions'],
+      ...d.days.map(x=>[x.date,x.firstCheckIn||'',x.lastCheckOut||'',x.sessions,(x.totalSeconds/3600).toFixed(2),x.exceptions.join(' ')])];
+    name=`attendance-${d.employee.name}-${arf.month}`;
+  }else{
+    rows=[['Employee','Designation','Days present','Sessions','On site (h)','Days with exceptions'],
+      ...d.employees.map(r=>[r.name,r.designation,r.daysPresent,r.sessions,(r.totalSeconds/3600).toFixed(2),r.daysWithExceptions])];
+    name=`attendance-summary-${arf.month}`;
+  }
+  const csv=rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=name.replace(/[^\w.-]+/g,'_')+'.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 /* ── LEAVE REQUESTS ── */

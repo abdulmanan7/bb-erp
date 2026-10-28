@@ -59,6 +59,8 @@ $routes->group('api', static function (RouteCollection $routes) {
     // Attendance monitoring — admin only
     $routes->get('attendance/sessions', 'Api\AttendanceMonitor::sessions', ['filter' => 'auth:admin']);
     $routes->get('attendance/sessions/(:segment)/track', 'Api\AttendanceMonitor::track/$1', ['filter' => 'auth:admin']);
+    $routes->get('attendance/report', 'Api\AttendanceReports::employee', ['filter' => 'auth:admin']);
+    $routes->get('attendance/report/summary', 'Api\AttendanceReports::summary', ['filter' => 'auth:admin']);
 
     // Leave requests & announcements — admin manages, employees read via the mobile API
     $routes->get('leaves', 'Api\Leaves::index', ['filter' => 'auth:admin']);
