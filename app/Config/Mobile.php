@@ -21,7 +21,7 @@ class Mobile extends BaseConfig
     public array $platforms = ['android', 'ios'];
 
     /** Firebase project and service-account JSON path. Push is skipped when either is empty. */
-    public string $fcmProjectId = '';
+    public string $fcmProjectId = 'builders-3b9b4';
 
     public string $fcmServiceAccountPath = '';
 }

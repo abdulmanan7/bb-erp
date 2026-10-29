@@ -265,7 +265,8 @@ Each notification is created once per event, so the app does not receive duplica
 | Leave Requests | `leave-types`, `leaves`, `leaves` POST, `leaves/{id}`, `leaves/{id}/cancel` |
 | Notifications | `notifications`, `notifications/{id}` |
 | Announcements | `announcements`, `announcements/{id}` |
-| My Profile | Name and designation are in `status` and history responses. Profile editing is not provided. |
+| My Profile | `profile`, `profile/password` (section 14) |
+| Spending | `spendings`, `spendings` POST, `spendings/{id}`, `spendings/{id}/attachment` (section 14) |
 | Logout | `POST /mobile/logout`, then clear local data |
 
 ## 10. Error codes
@@ -322,5 +323,63 @@ Tell the backend side before relying on these:
 Create employee accounts from the admin panel (Employees → enable login). Then create a project, assign the employee, and use the mobile login endpoint.
 
 The seeded admin account (`BBAccounts`) cannot use mobile endpoints.
+
+## 14. Spending and profile
+
+### Spending entries
+
+Employees record **advances** (money given to them) and **spending** (money they spent for a project). Each entry belongs to one of their assigned active projects. Account heads are not used for mobile entries.
+
+`GET /mobile/spendings?kind=advance|spend&page=1&perPage=20` returns the employee's own entries, newest first (paginated). `kind` is optional.
+
+`POST /mobile/spendings`
+
+```json
+{
+  "kind": "spend",
+  "projectId": "...",
+  "date": "2026-10-29",
+  "amount": 1500,
+  "party": "Hardware shop",
+  "description": "Cement bags",
+  "attachment": { "name": "bill.jpg", "data": "data:image/jpeg;base64,..." }
+}
+```
+
+- `kind`: `spend` or `advance`.
+- `projectId`: must be an active project assigned to the employee (use `GET /mobile/projects`).
+- `date`: `YYYY-MM-DD`. Defaults to today on the server if invalid.
+- `amount`: greater than zero.
+- `party`, `description`, `attachment`: optional. An attachment must be an image (`jpg`, `jpeg`, `png`, `gif`, `webp`) or `pdf`, up to 5 MB. `data` is base64, with or without a `data:` prefix.
+- Response: `200 { "spending": <spending> }`.
+- Validation errors return `400` with `error`.
+
+`GET /mobile/spendings/{id}` returns `{ "spending": <spending> }`. Entries that belong to other employees return `404`.
+
+`GET /api/spendings/{id}/attachment` streams the file for the employee's own entries. Send the bearer token. Use this URL for viewing or downloading attachments.
+
+Spending object:
+
+```json
+{
+  "id": "...", "kind": "spend | advance", "employeeId": "...", "projectId": "...",
+  "date": "2026-10-29", "amount": 1500, "party": "Hardware shop", "description": "Cement bags",
+  "attachment": "bill.jpg", "createdBy": "Ali", "createdAt": "2026-10-29 10:12:00"
+}
+```
+
+- `attachment` is the file name, or an empty string when there is none. Use `GET /api/spendings/{id}/attachment` to fetch the file.
+- `createdAt` is server time in `YYYY-MM-DD HH:MM:SS` form with no `Z`. Treat it as UTC when converting.
+- `headId`, `subHeadId` are present in the response but are always empty for new entries. Ignore them.
+
+### Profile
+
+`GET /mobile/profile` returns `{ "profile": { "id", "name", "username", "designation", "phone" } }`.
+
+`POST /mobile/profile/password` with `{ "currentPassword": "...", "newPassword": "..." }` returns `{ "ok": true }`.
+
+- New password must be at least 8 characters.
+- `422 INVALID_PASSWORD` if the current password is wrong. Do not treat this as a session error.
+- Changing the password signs out **all** mobile sessions, including this device. After success, clear local tokens and send the user to login.
 
 Run the migration `migrate_attendance_mobile.sql` on the target database before testing. It is also appended to `schema.sql` for new installs.

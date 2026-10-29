@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Model;
 
 class SpendingModel extends Model
@@ -32,6 +33,18 @@ class SpendingModel extends Model
             'createdBy'   => $r['created_by'] ?? '',
             'createdAt'   => $r['created_at'] ?? null,
         ];
+    }
+
+    public function listQuery(string $employeeId, string $kind = ''): BaseBuilder
+    {
+        $q = $this->db->table('spendings')
+            ->where('employee_id', $employeeId)
+            ->orderBy('spend_date', 'DESC')
+            ->orderBy('created_at', 'DESC');
+        if (in_array($kind, ['advance', 'spend'], true)) {
+            $q->where('kind', $kind);
+        }
+        return $q;
     }
 
     /** All entries, or only one employee's entries when an id is given. */

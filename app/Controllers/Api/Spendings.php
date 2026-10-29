@@ -4,11 +4,9 @@ namespace App\Controllers\Api;
 
 use App\Libraries\Attachments;
 use App\Models\EmployeeModel;
-use App\Models\HeadModel;
 use App\Models\ProjectAssignmentModel;
 use App\Models\ProjectModel;
 use App\Models\SpendingModel;
-use App\Models\SubHeadModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class Spendings extends BaseApiController
@@ -131,23 +129,6 @@ class Spendings extends BaseApiController
             return 'This project is not assigned to you.';
         }
 
-        $headId = '';
-        $subHeadId = '';
-        if ($kind === 'spend') {
-            $head = (new HeadModel())->find((string) ($b['headId'] ?? ''));
-            if (! $head || $head['type'] !== 'Expense') {
-                return 'Select a valid expense head.';
-            }
-            if (! $isAdmin && ! in_array($head['id'], (new EmployeeModel())->assignedHeadIds($employeeId), true)) {
-                return 'This head is not assigned to you.';
-            }
-            $headId = $head['id'];
-            $subHeadId = (string) ($b['subHeadId'] ?? '');
-            if ($subHeadId !== '' && ! (new SubHeadModel())->where('id', $subHeadId)->where('head_id', $headId)->first()) {
-                return 'Invalid sub-head.';
-            }
-        }
-
         $amount = (float) ($b['amount'] ?? 0);
         if ($amount <= 0) {
             return 'Enter an amount greater than zero.';
@@ -157,8 +138,8 @@ class Spendings extends BaseApiController
             'kind'        => $kind,
             'employee_id' => $employeeId,
             'project_id'  => $projectId,
-            'head_id'     => $headId,
-            'sub_head_id' => $subHeadId,
+            'head_id'     => '',
+            'sub_head_id' => '',
             'spend_date'  => $this->validDate($b['date'] ?? ''),
             'amount'      => $amount,
             'party'       => trim((string) ($b['party'] ?? '')),

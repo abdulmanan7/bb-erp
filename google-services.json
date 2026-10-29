@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "584486153455",
+    "project_id": "bbuilders-3b9b4",
+    "storage_bucket": "bbuilders-3b9b4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:584486153455:android:9649bb254734b16c823f1a",
+        "android_client_info": {
+          "package_name": "com.msalmanx.bbuilders"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDcp7P8AwhYYgkeD4Mnd1CUv_VqqLIcTWg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

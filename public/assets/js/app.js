@@ -825,13 +825,10 @@ function spendingForm(id){
   const editing=id?db.spendings.find(x=>x.id===id):null;
   const admin=session.role==='admin';
   const kind=editing?.kind||'spend';
-  const assigned=currentEmployee()?.assignedHeads||[];
-  const heads=db.heads.filter(h=>h.type==='Expense'&&(admin||assigned.includes(h.id)));
   const projects=db.projects.filter(p=>p.status==='active'||p.id===editing?.projectId);
   if(!projects.length){toast('No active projects assigned. Contact admin.','warn');return;}
   const empOpts=db.employees.map(e=>`<option value="${e.id}" ${editing?.employeeId===e.id?'selected':''}>${esc(e.name)}</option>`).join('');
   const projOpts=projects.map(p=>`<option value="${p.id}" ${editing?.projectId===p.id?'selected':''}>${esc(p.name)}${p.status==='active'?'':' (inactive)'}</option>`).join('');
-  const headOpts=heads.map(h=>`<option value="${h.id}" ${editing?.headId===h.id?'selected':''}>${esc(h.name)}</option>`).join('');
   showModal(`<div class="modal-header"><h3>${id?'Edit':'New'} Spending Entry</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
     <form onsubmit="saveSpending(event,'${id||''}')">
       <label>Entry Type *</label><select id="spKind" onchange="spKindSync()">
@@ -839,10 +836,6 @@ function spendingForm(id){
         <option value="advance" ${kind==='advance'?'selected':''}>Advance — money given to employee</option></select>
       ${admin?`<label>Employee *</label><select id="spEmp" required>${empOpts}</select>`:''}
       <label>Project *</label><select id="spProj" required>${projOpts}</select>
-      <div id="spHeadWrap" class="row-inline">
-        <div><label>Account Head *</label><select id="spHead" onchange="spHeadSync()"><option value="">— Select head —</option>${headOpts}</select></div>
-        <div id="spSubWrap" style="display:none"><label>Sub-Head *</label><select id="spSub"></select></div>
-      </div>
       <div class="row-inline">
         <div><label>Date *</label><input type="date" id="spDate" value="${editing?.date||new Date().toISOString().slice(0,10)}" required></div>
         <div><label>Amount (PKR) *</label><input type="number" id="spAmount" min="1" value="${editing?.amount||''}" placeholder="0" required></div>
@@ -860,35 +853,18 @@ function spendingForm(id){
         <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Entry</button>
       </div>
     </form>`);
-  spKindSync(editing?.subHeadId||'');
+  spKindSync();
 }
 
-function spKindSync(pre=''){
-  const spend=document.getElementById('spKind').value==='spend';
-  document.getElementById('spHeadWrap').style.display=spend?'':'none';
-  document.getElementById('spHead').required=spend;
-  document.getElementById('spPartyLabel').textContent=spend?'Paid To':'Given By';
-  spHeadSync(pre);
-}
-
-function spHeadSync(pre=''){
-  const headId=document.getElementById('spHead').value;
-  const subs=(db.subHeads||[]).filter(s=>s.headId===headId);
-  const show=subs.length>0&&document.getElementById('spKind').value==='spend';
-  const wrap=document.getElementById('spSubWrap'),sel=document.getElementById('spSub');
-  wrap.style.display=show?'block':'none';
-  sel.required=show;
-  sel.innerHTML=`<option value="">— Select sub-head —</option>`+subs.map(s=>`<option value="${s.id}" ${s.id===pre?'selected':''}>${esc(s.name)}</option>`).join('');
+function spKindSync(){
+  document.getElementById('spPartyLabel').textContent=document.getElementById('spKind').value==='spend'?'Paid To':'Given By';
 }
 
 async function saveSpending(e,id){
   e.preventDefault();
-  const kind=document.getElementById('spKind').value;
   const amount=Number(document.getElementById('spAmount').value||0);
   if(amount<=0){toast('Amount must be greater than zero.','warn');return;}
-  const spend=kind==='spend';
-  const data={kind,employeeId:document.getElementById('spEmp')?.value,projectId:document.getElementById('spProj').value,
-    headId:spend?document.getElementById('spHead').value:'',subHeadId:spend?document.getElementById('spSub').value:'',
+  const data={kind:document.getElementById('spKind').value,employeeId:document.getElementById('spEmp')?.value,projectId:document.getElementById('spProj').value,
     date:document.getElementById('spDate').value,amount,
     party:document.getElementById('spParty').value.trim(),description:document.getElementById('spDesc').value.trim()};
   const file=document.getElementById('spAttach').files[0];

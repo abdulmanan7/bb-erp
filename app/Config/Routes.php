@@ -100,6 +100,13 @@ $routes->group('api', static function (RouteCollection $routes) {
 
         $routes->get('notifications', 'Api\Mobile\Notifications::index', ['filter' => 'auth:employee']);
         $routes->get('notifications/(:segment)', 'Api\Mobile\Notifications::show/$1', ['filter' => 'auth:employee']);
+
+        $routes->get('spendings', 'Api\Mobile\Spendings::index', ['filter' => 'auth:employee']);
+        $routes->post('spendings', 'Api\Spendings::create', ['filter' => 'auth:employee']);
+        $routes->get('spendings/(:segment)', 'Api\Mobile\Spendings::show/$1', ['filter' => 'auth:employee']);
+
+        $routes->get('profile', 'Api\Mobile\Profile::show', ['filter' => 'auth:employee']);
+        $routes->post('profile/password', 'Api\Mobile\Profile::changePassword', ['filter' => 'auth:employee']);
     });
 
     // Settings / backup — admin only
