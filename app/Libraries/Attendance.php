@@ -24,6 +24,7 @@ final class Attendance
     private const WINDOW_TOLERANCE_SECONDS = 60;
     private const MAX_CLOCK_SKEW_SECONDS = 60;
     private const DUPLICATE_KEY_ERROR = 1062;
+    private const EXIT_ALERT_COOLDOWN_SECONDS = 600;
 
     private AttendanceConfig $config;
 
@@ -32,6 +33,7 @@ final class Attendance
         private readonly AttendanceLocationModel $locations = new AttendanceLocationModel(),
         private readonly ProjectModel $projects = new ProjectModel(),
         private readonly ProjectAssignmentModel $assignments = new ProjectAssignmentModel(),
+        private readonly Notifier $notifier = new Notifier(),
     ) {
         $this->config = config(AttendanceConfig::class);
     }
@@ -224,9 +226,11 @@ final class Attendance
             ];
         }
 
+        usort($rows, fn ($a, $b) => strcmp($a['captured_at'], $b['captured_at']));
         if ($rows !== []) {
             db_connect()->table('attendance_location_logs')->ignore(true)->insertBatch($rows);
             $this->applyBatchToSession($session, $rows);
+            $this->notifyBoundaryExit($session, $rows);
             AttendanceReport::refreshDuration($session['id']);
         }
 
@@ -237,9 +241,34 @@ final class Attendance
         ];
     }
 
+    /** @param list<array> $rows sorted by captured_at */
+    private function notifyBoundaryExit(array $session, array $rows): void
+    {
+        $wasInside = (bool) $session['last_inside'];
+        foreach ($rows as $row) {
+            $isInside = (bool) $row['inside_boundary'];
+            if ($wasInside && ! $isInside) {
+                $cacheKey = "attendance_exit_alert:{$session['id']}";
+                if (! cache()->get($cacheKey)) {
+                    $this->notifier->notify(
+                        [$session['employee_id']],
+                        'attendance',
+                        'Left the site area',
+                        'You are outside the project boundary. Your attendance is still running.',
+                        'attendance_session',
+                        $session['id'],
+                        "attendance_exit:{$row['event_id']}",
+                    );
+                    cache()->save($cacheKey, true, self::EXIT_ALERT_COOLDOWN_SECONDS);
+                }
+                return;
+            }
+            $wasInside = $isInside;
+        }
+    }
+
     private function applyBatchToSession(array $session, array $rows): void
     {
-        usort($rows, fn ($a, $b) => strcmp($a['captured_at'], $b['captured_at']));
         $latest = end($rows);
 
         $update = [];

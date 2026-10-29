@@ -39,6 +39,15 @@ final class AttendanceAutoClose
             ]);
             if ($didClose) {
                 AttendanceReport::refreshDuration($row['id']);
+                (new Notifier())->notify(
+                    [$row['employee_id']],
+                    'attendance',
+                    'Attendance closed automatically',
+                    'Your attendance was closed at the end of your shift. Contact your admin if the record is wrong.',
+                    'attendance_session',
+                    $row['id'],
+                    "attendance_autoclose:{$row['id']}",
+                );
                 $closed++;
             }
         }
