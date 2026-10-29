@@ -125,3 +125,4 @@ _modules/*
 /results/
 /phpunit.xml
 bbuilders-3b9b4-firebase-adminsdk-*.json
+bbuilders-app/
