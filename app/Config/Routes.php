@@ -57,6 +57,7 @@ $routes->group('api', static function (RouteCollection $routes) {
     $routes->put('projects/(:segment)/assignments', 'Api\Projects::assign/$1', ['filter' => 'auth:admin']);
 
     // Attendance monitoring — admin only
+    $routes->get('attendance/roster', 'Api\AttendanceMonitor::roster', ['filter' => 'auth:admin']);
     $routes->get('attendance/sessions', 'Api\AttendanceMonitor::sessions', ['filter' => 'auth:admin']);
     $routes->get('attendance/sessions/(:segment)/track', 'Api\AttendanceMonitor::track/$1', ['filter' => 'auth:admin']);
     $routes->get('attendance/report', 'Api\AttendanceReports::employee', ['filter' => 'auth:admin']);

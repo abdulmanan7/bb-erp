@@ -168,48 +168,59 @@ async function saveProject(e,id){
 }
 
 /* ── ATTENDANCE MONITOR ── */
-let af={status:'active',projectId:'',date:''};
+const localDate=()=>new Date().toLocaleDateString('en-CA');
+let af={status:'all',projectId:'',date:localDate(),q:''};
 let monitorMap=null;
 const TRACKING_BADGE={current:['badge-income','Current'],stale:['badge-warn','Stale'],delayed:['badge-warn','Delayed'],unavailable:['badge-neutral','No data']};
+const STATUS_BADGE={checked_in:['badge-income','Checked in'],checked_out:['badge-neutral','Checked out'],not_checked_in:['badge-expense','Not checked in'],on_leave:['badge-warn','On leave']};
 
 async function fetchAttendance(){
-  const qs=new URLSearchParams({perPage:100});
-  if(af.status!=='all')qs.set('status',af.status);
-  if(af.projectId)qs.set('projectId',af.projectId);
-  if(af.date){qs.set('from',af.date);qs.set('to',af.date);}
-  const [sessions,projects]=await Promise.all([api('attendance/sessions?'+qs),api('projects?status=active')]);
-  return {sessions:sessions?sessions.items:[],projects:projects?projects.projects:[]};
+  const [roster,projects]=await Promise.all([api('attendance/roster?'+new URLSearchParams({date:af.date})),api('projects?status=active')]);
+  return {...(roster||{employees:[],counts:{}}),projects:projects?projects.projects:[]};
 }
 
 function renderAttendancePage(){
   const slot=remoteSlot('attendance');
-  const data=slot.data||{sessions:[],projects:[]};
-  const projectOpts=data.projects.map(p=>`<option value="${p.id}" ${af.projectId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
-  const body=slot.data===null?LOADING_ROW(8):data.sessions.map(s=>{
-    const st=TRACKING_BADGE[s.lastLocation.state]||TRACKING_BADGE.unavailable;
-    const pos=s.status==='active'?(s.lastLocation.inside===null?'—':`<span class="badge ${s.lastLocation.inside?'badge-income':'badge-expense'}">${s.lastLocation.inside?'Inside':'Outside'}</span> <span style="font-size:12px;color:#8896a6">${s.lastLocation.distanceM??'—'} m</span>`):
-      (s.checkOut?.inside===false?'<span class="badge badge-expense">Checked out outside</span>':'<span class="badge badge-income">Closed</span>');
-    return `<tr><td><strong>${esc(s.employeeName)}</strong><div style="font-size:12px;color:#8896a6">${esc(s.designation)}</div></td>
-      <td>${esc(s.projectName)}</td>
-      <td style="white-space:nowrap">${fmtTime(s.checkIn.at,s.projectTimezone)}</td>
-      <td style="white-space:nowrap">${fmtDuration(s.durationSeconds)}</td>
-      <td style="white-space:nowrap">${s.status==='active'?timeAgo(s.lastLocation.at):fmtTime(s.checkOut?.at,s.projectTimezone)}</td>
-      <td><span class="badge ${st[0]}">${st[1]}</span></td>
-      <td>${pos}</td>
-      <td><button class="link-btn" onclick="trackSession('${s.id}')"><i class="fa-solid fa-route"></i> Trail</button></td></tr>`;
-  }).join('')||EMPTY_ROW(8,'No attendance records match the filters.');
+  const data=slot.data||{employees:[],counts:{},projects:[]};
+  const c=data.counts||{};
+  const rows=(data.employees||[]).filter(r=>(af.status==='all'||r.status===af.status)
+    &&(!af.projectId||r.session?.projectId===af.projectId)
+    &&(!af.q||r.name.toLowerCase().includes(af.q.toLowerCase())));
+  const projectOpts=(data.projects||[]).map(p=>`<option value="${p.id}" ${af.projectId===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
+  const card=(cls,label,value)=>`<div class="s-card ${cls}" style="padding:13px 16px"><div class="label">${label}</div><div class="value" style="font-size:17px;margin-top:4px">${value}</div></div>`;
+  const body=slot.data===null?LOADING_ROW(8):rows.map(r=>{
+    const s=r.session,badge=STATUS_BADGE[r.status];
+    const leave=r.leave?`<div style="font-size:12px;color:#8896a6">${esc(r.leave.typeName)} · ${dateStr(r.leave.startDate)} – ${dateStr(r.leave.endDate)}</div>`:'';
+    const track=TRACKING_BADGE[s?.lastLocation?.state]||TRACKING_BADGE.unavailable;
+    return `<tr><td><strong>${esc(r.name)}</strong><div style="font-size:12px;color:#8896a6">${esc(r.designation)}</div></td>
+      <td><span class="badge ${badge[0]}">${badge[1]}</span>${leave}</td>
+      <td>${s?esc(s.projectName):'—'}</td>
+      <td style="white-space:nowrap">${s?fmtTime(s.checkIn.at,s.projectTimezone):'—'}</td>
+      <td style="white-space:nowrap">${s?fmtDuration(s.durationSeconds):'—'}</td>
+      <td style="white-space:nowrap">${r.status==='checked_in'?timeAgo(s.lastLocation.at):'—'}</td>
+      <td>${r.status==='checked_in'?`<span class="badge ${track[0]}">${track[1]}</span>`:'—'}</td>
+      <td>${s?`<button class="link-btn" onclick="trackSession('${s.id}')"><i class="fa-solid fa-route"></i> Trail</button>`:''}</td></tr>`;
+  }).join('')||EMPTY_ROW(8,'No employees match the filters.');
   setTimeout(drawMonitorMap,0);
   return shell(`
     <div class="page-header"><h2><i class="fa-solid fa-location-dot"></i> Live Attendance</h2>
       <button class="btn-secondary" onclick="invalidateRemote('attendance');render()"><i class="fa-solid fa-arrow-rotate-right"></i> Refresh</button></div>
+    <div class="summary-cards" style="gap:10px;margin-bottom:14px">
+      ${card('income','Checked in',c.checkedIn??0)}${card('expense','Not checked in',c.notCheckedIn??0)}${card('net','On leave',c.onLeave??0)}${card('','Checked out',c.checkedOut??0)}
+    </div>
     <div class="page-title-bar" style="padding:12px 18px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <select style="width:auto;min-width:130px;margin-top:0" onchange="setAttendanceFilter('status',this.value)">
-        <option value="active" ${af.status==='active'?'selected':''}>Checked in</option><option value="closed" ${af.status==='closed'?'selected':''}>Closed</option><option value="all" ${af.status==='all'?'selected':''}>All</option></select>
-      <select style="width:auto;min-width:160px;margin-top:0" onchange="setAttendanceFilter('projectId',this.value)"><option value="">All projects</option>${projectOpts}</select>
       <input type="date" value="${af.date}" style="width:auto;margin-top:0" onchange="setAttendanceFilter('date',this.value)">
-      <span style="font-size:12px;color:#8896a6;margin-left:auto">Last-known positions · refreshes every minute</span></div></div>
-    <div id="monMap" style="height:300px;border-radius:12px;margin-bottom:16px;border:1px solid var(--border)"></div>
-    <table class="list-table"><thead><tr><th>Employee</th><th>Project</th><th>Check-in</th><th>On site</th><th>Last update</th><th>Tracking</th><th>Position</th><th></th></tr></thead>
+      <select style="width:auto;min-width:150px;margin-top:0" onchange="af.status=this.value;render()">
+        <option value="all" ${af.status==='all'?'selected':''}>All statuses</option>
+        <option value="checked_in" ${af.status==='checked_in'?'selected':''}>Checked in</option>
+        <option value="not_checked_in" ${af.status==='not_checked_in'?'selected':''}>Not checked in</option>
+        <option value="on_leave" ${af.status==='on_leave'?'selected':''}>On leave</option>
+        <option value="checked_out" ${af.status==='checked_out'?'selected':''}>Checked out</option></select>
+      <select style="width:auto;min-width:160px;margin-top:0" onchange="af.projectId=this.value;render()"><option value="">All projects</option>${projectOpts}</select>
+      <input id="attQ" placeholder="Search employee…" value="${esc(af.q)}" style="flex:1;min-width:160px;margin-top:0" oninput="af.q=this.value;render()">
+      <span style="font-size:12px;color:#8896a6;margin-left:auto">Refreshes every minute</span></div></div>
+    <div id="monMap" style="height:300px;border-radius:12px;margin:14px 0 16px;border:1px solid var(--border)"></div>
+    <table class="list-table"><thead><tr><th>Employee</th><th>Status</th><th>Project</th><th>Check-in</th><th>On site</th><th>Last update</th><th>Tracking</th><th></th></tr></thead>
       <tbody>${body}</tbody></table>`);
 }
 
@@ -219,7 +230,7 @@ function drawMonitorMap(){
   const el=document.getElementById('monMap');
   if(!el)return;
   const slot=remoteSlot('attendance');
-  const sessions=(slot.data?.sessions||[]).filter(s=>s.status==='active');
+  const sessions=(slot.data?.employees||[]).filter(r=>r.status==='checked_in').map(r=>r.session);
   monitorMap=makeMap(el,DEFAULT_CENTER[0],DEFAULT_CENTER[1],12);
   const bounds=[];
   (slot.data?.projects||[]).forEach(p=>{
