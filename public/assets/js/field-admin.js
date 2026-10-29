@@ -303,7 +303,7 @@ function employeeReportHtml(d){
   const card=(label,value)=>`<div class="s-card net" style="padding:13px 16px"><div class="label">${label}</div><div class="value" style="font-size:17px;margin-top:4px">${value}</div></div>`;
   const dayRows=d.days.map(x=>`<tr><td style="white-space:nowrap">${dateStr(x.date)}</td><td>${fmtTime(x.firstCheckIn,tz)}</td><td>${fmtTime(x.lastCheckOut,tz)}</td>
     <td>${x.sessions}</td><td style="white-space:nowrap">${fmtDuration(x.totalSeconds)}</td>
-    <td>${x.exceptions.map(e=>`<span class="badge badge-warn" style="margin:1px">${esc(e)}</span>`).join('')||'—'}</td></tr>`).join('');
+    <td>${x.openSessions?'<span class="badge badge-warn" style="margin:1px">No check-out</span>':''}${x.exceptions.map(e=>`<span class="badge badge-warn" style="margin:1px">${esc(e)}</span>`).join('')||''}${!x.openSessions&&!x.exceptions.length?'—':''}</td></tr>`).join('');
   return `<h3 style="margin:16px 0 10px;color:var(--primary)">${esc(d.employee.name)}${d.employee.designation?` · ${esc(d.employee.designation)}`:''} — ${d.month}</h3>
     <div class="summary-cards" style="gap:10px;margin-bottom:14px">
       ${card('Days present',s.daysPresent)}${card('Sessions',s.sessions)}${card('Total on site',fmtDuration(s.totalSeconds))}${card('Total hours',s.totalHours.toFixed(2))}${card('Days with exceptions',s.daysWithExceptions)}
