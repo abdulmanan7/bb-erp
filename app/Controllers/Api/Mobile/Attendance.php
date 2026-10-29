@@ -4,6 +4,7 @@ namespace App\Controllers\Api\Mobile;
 
 use App\Controllers\Api\BaseApiController;
 use App\Libraries\Attendance as AttendanceService;
+use App\Libraries\AttendanceAutoClose;
 use App\Libraries\AttendanceException;
 use App\Libraries\Clock;
 use App\Models\AttendanceSessionModel;
@@ -14,6 +15,7 @@ class Attendance extends BaseApiController
 {
     public function status(): ResponseInterface
     {
+        AttendanceAutoClose::closeExpired();
         $session = (new AttendanceSessionModel())->activeFor($this->user()['id']);
         $detailed = $session ? (new AttendanceSessionModel())->detailed($session['id']) : null;
         return $this->json([

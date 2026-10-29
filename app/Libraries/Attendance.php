@@ -38,6 +38,7 @@ final class Attendance
 
     public function checkIn(array $employee, array $input): array
     {
+        AttendanceAutoClose::closeExpired();
         $eventId = $this->eventId($input['eventId'] ?? null);
         if ($eventId !== null && $existing = $this->sessions->where(['employee_id' => $employee['id'], 'check_in_event_id' => $eventId])->first()) {
             return $existing;
@@ -161,6 +162,7 @@ final class Attendance
         if (! $closed) {
             throw new AttendanceException('You are not checked in.', 'NO_ACTIVE_SESSION', 409);
         }
+        AttendanceReport::refreshDuration($session['id']);
         return $this->sessions->find($session['id']);
     }
 
@@ -225,6 +227,7 @@ final class Attendance
         if ($rows !== []) {
             db_connect()->table('attendance_location_logs')->ignore(true)->insertBatch($rows);
             $this->applyBatchToSession($session, $rows);
+            AttendanceReport::refreshDuration($session['id']);
         }
 
         return [

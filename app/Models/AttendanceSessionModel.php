@@ -74,7 +74,6 @@ class AttendanceSessionModel extends Model
     public static function present(array $r, bool $admin): array
     {
         $now = Clock::now();
-        $active = $r['status'] === 'active';
         $data = [
             'id'               => $r['id'],
             'employeeId'       => $r['employee_id'],
@@ -88,7 +87,7 @@ class AttendanceSessionModel extends Model
             'assignmentActive' => (bool) ($r['assignment_active'] ?? false),
             'checkIn'          => self::point($r, 'check_in', $admin),
             'checkOut'         => self::point($r, 'check_out', $admin),
-            'durationSeconds'  => $active ? Clock::timestamp($now) - Clock::timestamp($r['check_in_at']) : (int) $r['duration_seconds'],
+            'durationSeconds'  => (int) $r['duration_seconds'],
             'exceptions'       => array_values(array_filter(explode(',', (string) $r['exceptions']))),
         ];
         if ($admin) {

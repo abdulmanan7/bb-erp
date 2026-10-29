@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\AttendanceAutoClose;
 use App\Libraries\AttendanceReport;
 use App\Models\EmployeeModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -12,6 +13,7 @@ class AttendanceReports extends BaseApiController
     /** Daily breakdown and monthly totals for one employee. */
     public function employee(): ResponseInterface
     {
+        AttendanceAutoClose::closeExpired();
         $employee = (new EmployeeModel())->find((string) $this->request->getGet('employeeId'));
         if (! $employee) {
             return $this->fail('Employee not found.', 404);
@@ -31,6 +33,7 @@ class AttendanceReports extends BaseApiController
     /** Monthly totals for every employee, including those with no attendance (for salary sheets). */
     public function summary(): ResponseInterface
     {
+        AttendanceAutoClose::closeExpired();
         $range = $this->range();
         $byEmployee = [];
         foreach (AttendanceReport::sessions($range['from'], $range['to']) as $session) {

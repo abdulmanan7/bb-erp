@@ -157,9 +157,10 @@ Project coordinates and radius are deliberately not returned. The geofence is en
 }
 ```
 
-- `durationSeconds` is live for active sessions. Show elapsed time from `checkIn.at` on the device, or poll status.
+- `durationSeconds` is **on-site time**: time spent inside the project boundary, from location points. It is recalculated as location batches arrive, so it is not a live timer. Label it "On site", not "Elapsed".
 - `checkOut` is `null` while the session is active.
-- `exceptions` values: `OUTSIDE_BOUNDARY`, `POOR_ACCURACY`, `STALE_LOCATION`, `LOCATION_MISSING`, `MOCKED_LOCATION`. Show them as "Attendance exceptions" in history detail.
+- `exceptions` values: `OUTSIDE_BOUNDARY`, `POOR_ACCURACY`, `STALE_LOCATION`, `LOCATION_MISSING`, `MOCKED_LOCATION`, `AUTO_CLOSED`. Show them as "Attendance exceptions" in history detail.
+- **Auto-close:** each employee has a shift length (set by admin, default 8 hours). If a session is still open when the shift length has passed, the server closes it at the shift end and sets `AUTO_CLOSED`. The app must not assume an active session stays active. Always refresh status when the app is opened.
 - Coordinates are not returned to the employee.
 
 ### Location tracking upload (offline queue)

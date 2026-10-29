@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\AttendanceAutoClose;
 use App\Libraries\Clock;
 use App\Libraries\TrackingGaps;
 use App\Models\AttendanceLocationModel;
@@ -13,6 +14,7 @@ class AttendanceMonitor extends BaseApiController
 {
     public function sessions(): ResponseInterface
     {
+        AttendanceAutoClose::closeExpired();
         $filters = [
             'employeeId' => (string) $this->request->getGet('employeeId'),
             'projectId'  => (string) $this->request->getGet('projectId'),

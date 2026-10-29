@@ -209,7 +209,7 @@ function renderAttendancePage(){
       <input type="date" value="${af.date}" style="width:auto;margin-top:0" onchange="setAttendanceFilter('date',this.value)">
       <span style="font-size:12px;color:#8896a6;margin-left:auto">Last-known positions · refreshes every minute</span></div></div>
     <div id="monMap" style="height:300px;border-radius:12px;margin-bottom:16px;border:1px solid var(--border)"></div>
-    <table class="list-table"><thead><tr><th>Employee</th><th>Project</th><th>Check-in</th><th>Elapsed</th><th>Last update</th><th>Tracking</th><th>Position</th><th></th></tr></thead>
+    <table class="list-table"><thead><tr><th>Employee</th><th>Project</th><th>Check-in</th><th>On site</th><th>Last update</th><th>Tracking</th><th>Position</th><th></th></tr></thead>
       <tbody>${body}</tbody></table>`);
 }
 
