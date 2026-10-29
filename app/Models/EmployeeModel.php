@@ -12,7 +12,7 @@ class EmployeeModel extends Model
     protected $useTimestamps = false;
     protected $allowedFields = [
         'id', 'name', 'phone', 'designation',
-        'basic_salary', 'allowance', 'deduction', 'bonus', 'created_at',
+        'basic_salary', 'allowance', 'deduction', 'bonus', 'shift_hours', 'created_at',
     ];
 
     public function assignedHeadIds(string $employeeId): array
@@ -48,6 +48,7 @@ class EmployeeModel extends Model
             'allowance'    => (float) ($r['allowance'] ?? 0),
             'deduction'    => (float) ($r['deduction'] ?? 0),
             'bonus'        => (float) ($r['bonus'] ?? 0),
+            'shiftHours'   => (float) ($r['shift_hours'] ?? 8),
             'loginEnabled' => $user !== null,
             'username'     => $user['username'] ?? '',
             'assignedHeads' => $this->assignedHeadIds($r['id']),

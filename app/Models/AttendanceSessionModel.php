@@ -43,7 +43,7 @@ class AttendanceSessionModel extends Model
     public function listQuery(array $filters): BaseBuilder
     {
         $q = $this->db->table('attendance_sessions s')
-            ->select("s.*, e.name AS employee_name, e.designation AS employee_designation,
+            ->select("s.*, e.name AS employee_name, e.designation AS employee_designation, e.shift_hours AS employee_shift_hours,
                 p.name AS project_name, p.timezone AS project_timezone, p.latitude AS project_lat,
                 p.longitude AS project_lng, p.radius_m AS project_radius_m,
                 (pa.status = 'active') AS assignment_active")

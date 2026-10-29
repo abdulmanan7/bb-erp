@@ -207,6 +207,7 @@ class Backup extends BaseApiController
                 'allowance'    => (float) ($e['allowance'] ?? 0),
                 'deduction'    => (float) ($e['deduction'] ?? 0),
                 'bonus'        => (float) ($e['bonus'] ?? 0),
+                'shift_hours'  => (float) ($e['shiftHours'] ?? 8),
                 'created_at'   => $this->now(),
             ]);
             $m->setAssignedHeads($id, (array) ($e['assignedHeads'] ?? []));

@@ -16,7 +16,7 @@ final class AttendanceReport
         return ['from' => $start->format('Y-m-d'), 'to' => $start->modify('last day of this month')->format('Y-m-d')];
     }
 
-    /** Sessions in the date range (mapped), with on-site seconds derived from the location trail. */
+    /** Sessions in the date range (mapped). Durations are the stored on-site seconds. */
     public static function sessions(string $from, string $to, string $employeeId = ''): array
     {
         $filters = ['from' => $from, 'to' => $to];
@@ -24,19 +24,14 @@ final class AttendanceReport
             $filters['employeeId'] = $employeeId;
         }
         $rows = (new AttendanceSessionModel())->listQuery($filters)->get()->getResultArray();
-        $points = self::pointsBySession(array_column($rows, 'id'));
-
-        return array_map(function ($row) use ($points) {
-            $session = AttendanceSessionModel::present($row, false);
-            $session['durationSeconds'] = self::onSiteSeconds($row, $points[$row['id']] ?? []);
-            return $session;
-        }, $rows);
+        return array_map(fn ($row) => AttendanceSessionModel::present($row, false), $rows);
     }
 
     /**
      * Seconds the employee was inside the project boundary. Time counts only between two consecutive
      * inside points; gaps longer than the tracking threshold and any leg that leaves the site are excluded.
      * Without any location points, a closed session counts check-in to check-out when both ends are inside.
+     * An open session (no check-out) stops counting at check-in plus the employee's shift length.
      */
     public static function onSiteSeconds(array $row, array $points): int
     {
@@ -55,16 +50,42 @@ final class AttendanceReport
         usort($timeline, fn ($a, $b) => $a[0] <=> $b[0]);
 
         $maxGap = config(Attendance::class)->gapThresholdSeconds;
+        $deadline = $row['status'] === 'active'
+            ? Clock::timestamp($row['check_in_at']) + (int) round(($row['employee_shift_hours'] ?? 8) * 3600)
+            : null;
         $seconds = 0;
         for ($i = 1, $count = count($timeline); $i < $count; $i++) {
             [$from, $fromInside] = $timeline[$i - 1];
             [$to, $toInside] = $timeline[$i];
             $gap = $to - $from;
             if ($fromInside && $toInside && $gap > 0 && $gap <= $maxGap) {
-                $seconds += $gap;
+                $seconds += $deadline === null ? $gap : max(0, min($to, $deadline) - $from);
             }
         }
         return $seconds;
+    }
+
+    /** Recalculates and stores a session's on-site seconds from its current location trail. */
+    public static function refreshDuration(string $sessionId): void
+    {
+        $db = db_connect();
+        $row = $db->table('attendance_sessions s')
+            ->select('s.*, e.shift_hours AS employee_shift_hours')
+            ->join('employees e', 'e.id = s.employee_id', 'left')
+            ->where('s.id', $sessionId)
+            ->get()->getRowArray();
+        if (! $row) {
+            return;
+        }
+        $points = $db->table('attendance_location_logs')
+            ->select('captured_at, inside_boundary')
+            ->where('session_id', $sessionId)
+            ->orderBy('captured_at', 'ASC')
+            ->get()->getResultArray();
+
+        $db->table('attendance_sessions')->where('id', $sessionId)->update([
+            'duration_seconds' => self::onSiteSeconds($row, $points),
+        ]);
     }
 
     /** One row per attendance date, summing every session that started that day. */
@@ -105,23 +126,5 @@ final class AttendanceReport
             'daysWithExceptions' => count(array_filter($days, fn ($day) => $day['exceptions'] !== [])),
             'openSessions'       => array_sum(array_column($days, 'openSessions')),
         ];
-    }
-
-    /** @return array<string, list<array{captured_at: string, inside_boundary: int}>> */
-    private static function pointsBySession(array $sessionIds): array
-    {
-        if ($sessionIds === []) {
-            return [];
-        }
-        $grouped = [];
-        $rows = db_connect()->table('attendance_location_logs')
-            ->select('session_id, captured_at, inside_boundary')
-            ->whereIn('session_id', $sessionIds)
-            ->orderBy('captured_at', 'ASC')
-            ->get()->getResultArray();
-        foreach ($rows as $point) {
-            $grouped[$point['session_id']][] = $point;
-        }
-        return $grouped;
     }
 }

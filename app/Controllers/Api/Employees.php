@@ -31,6 +31,7 @@ class Employees extends BaseApiController
             'allowance'    => (float) ($b['allowance'] ?? 0),
             'deduction'    => (float) ($b['deduction'] ?? 0),
             'bonus'        => (float) ($b['bonus'] ?? 0),
+            'shift_hours'  => $this->shiftHours($b),
             'created_at'   => $this->now(),
         ]);
         $m->setAssignedHeads($id, (array) ($b['assignedHeads'] ?? []));
@@ -64,6 +65,7 @@ class Employees extends BaseApiController
             'allowance'    => (float) ($b['allowance'] ?? 0),
             'deduction'    => (float) ($b['deduction'] ?? 0),
             'bonus'        => (float) ($b['bonus'] ?? 0),
+            'shift_hours'  => $this->shiftHours($b),
         ]);
         $m->setAssignedHeads($id, (array) ($b['assignedHeads'] ?? []));
         $this->syncUser($id, $name, $b);
@@ -80,6 +82,11 @@ class Employees extends BaseApiController
         db_connect()->table('employee_heads')->where('employee_id', $id)->delete();
         (new UserModel())->where('employee_id', $id)->delete();
         return $this->json(['ok' => true]);
+    }
+
+    private function shiftHours(array $b): float
+    {
+        return round(min(24, max(1, (float) ($b['shiftHours'] ?? 8))), 2);
     }
 
     /**

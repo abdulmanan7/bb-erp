@@ -20,7 +20,7 @@ class AttendanceReports extends BaseApiController
         $range = $this->range();
         $days = AttendanceReport::days(AttendanceReport::sessions($range['from'], $range['to'], $employee['id']));
         return $this->json([
-            'employee' => ['id' => $employee['id'], 'name' => $employee['name'], 'designation' => $employee['designation']],
+            'employee' => ['id' => $employee['id'], 'name' => $employee['name'], 'designation' => $employee['designation'], 'shiftHours' => (float) $employee['shift_hours']],
             'month'    => $range['month'],
             'timezone' => config(Attendance::class)->defaultTimezone,
             'days'     => $days,

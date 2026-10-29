@@ -304,7 +304,7 @@ function employeeReportHtml(d){
   const dayRows=d.days.map(x=>`<tr><td style="white-space:nowrap">${dateStr(x.date)}</td><td>${fmtTime(x.firstCheckIn,tz)}</td><td>${fmtTime(x.lastCheckOut,tz)}</td>
     <td>${x.sessions}</td><td style="white-space:nowrap">${fmtDuration(x.totalSeconds)}</td>
     <td>${x.openSessions?'<span class="badge badge-warn" style="margin:1px">No check-out</span>':''}${x.exceptions.map(e=>`<span class="badge badge-warn" style="margin:1px">${esc(e)}</span>`).join('')||''}${!x.openSessions&&!x.exceptions.length?'—':''}</td></tr>`).join('');
-  return `<h3 style="margin:16px 0 10px;color:var(--primary)">${esc(d.employee.name)}${d.employee.designation?` · ${esc(d.employee.designation)}`:''} — ${d.month}</h3>
+  return `<h3 style="margin:16px 0 10px;color:var(--primary)">${esc(d.employee.name)}${d.employee.designation?` · ${esc(d.employee.designation)}`:''} · Shift ${d.employee.shiftHours} h — ${d.month}</h3>
     <div class="summary-cards" style="gap:10px;margin-bottom:14px">
       ${card('Days present',s.daysPresent)}${card('Sessions',s.sessions)}${card('Total on site',fmtDuration(s.totalSeconds))}${card('Total hours',s.totalHours.toFixed(2))}${card('Days with exceptions',s.daysWithExceptions)}
     </div>

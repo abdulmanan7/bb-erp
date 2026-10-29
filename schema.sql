@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `allowance` decimal(14,2) NOT NULL DEFAULT 0,
   `deduction` decimal(14,2) NOT NULL DEFAULT 0,
   `bonus` decimal(14,2) NOT NULL DEFAULT 0,
+  `shift_hours` decimal(4,2) NOT NULL DEFAULT 8,
   `created_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

@@ -458,7 +458,7 @@ function renderEmployeesPage(){
 }
 
 function employeeForm(id){
-  const emp=id?db.employees.find(x=>x.id===id):{name:'',phone:'',designation:'',loginEnabled:false,username:'',password:'',assignedHeads:[]};
+  const emp=id?db.employees.find(x=>x.id===id):{name:'',phone:'',designation:'',shiftHours:8,loginEnabled:false,username:'',password:'',assignedHeads:[]};
   const checks=db.heads.length>0?db.heads.map(h=>`<label class="chk"><input type="checkbox" value="${h.id}" ${(emp.assignedHeads||[]).includes(h.id)?'checked':''}><span class="badge ${h.type==='Expense'?'badge-expense':'badge-income'}" style="margin-right:4px;font-size:10px">${h.type[0]}</span>${h.name}</label>`).join(''):'<p style="font-size:13px;color:#888">Add heads first.</p>';
   showModal(`<div class="modal-header"><h3>${id?'Edit':'Add'} Employee</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
     <form onsubmit="saveEmployee(event,'${id||''}')">
@@ -466,6 +466,7 @@ function employeeForm(id){
       <div class="row-inline">
         <div><label>Phone / WhatsApp</label><input id="ePhone" value="${emp.phone||''}" placeholder="923001234567"></div>
         <div><label>Designation</label><input id="eDesig" value="${emp.designation||''}"></div>
+        <div><label>Shift Length (hours)</label><input id="eShift" type="number" step="0.5" min="1" max="24" value="${emp.shiftHours||8}" required></div>
       </div>
       <hr class="section-divider">
       <strong style="font-size:12.5px;color:var(--primary)"><i class="fa-solid fa-money-bill-wave"></i> SALARY DEFAULTS</strong>
@@ -501,6 +502,7 @@ async function saveEmployee(e,id){
   e.preventDefault();
   const assignedHeads=[...document.querySelectorAll('#loginFields input[type=checkbox]:checked')].map(c=>c.value);
   const data={name:document.getElementById('eName').value.trim(),phone:document.getElementById('ePhone').value.trim(),designation:document.getElementById('eDesig').value.trim(),loginEnabled:document.getElementById('eLogin').checked,username:document.getElementById('eUser').value.trim(),password:document.getElementById('ePass').value,assignedHeads,
+    shiftHours:Number(document.getElementById('eShift').value)||8,
     basic:Number(document.getElementById('eBasic').value)||0,allowance:Number(document.getElementById('eAllow').value)||0,
     deduction:Number(document.getElementById('eDeduct').value)||0,bonus:Number(document.getElementById('eBonus').value)||0};
   if(!data.name){toast('Name required.','error');return;}
