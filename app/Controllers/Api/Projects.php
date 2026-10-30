@@ -89,6 +89,10 @@ class Projects extends BaseApiController
         if (! in_array($timezone, timezone_identifiers_list(), true)) {
             return 'Select a valid timezone.';
         }
+        $startTime = trim((string) ($b['startTime'] ?? ''));
+        if ($startTime !== '' && ! preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $startTime)) {
+            return 'Enter a valid start time (HH:MM).';
+        }
         $status = (string) ($b['status'] ?? 'active');
         if (! in_array($status, ['active', 'inactive'], true)) {
             return 'Invalid project status.';
@@ -102,6 +106,7 @@ class Projects extends BaseApiController
             'longitude'   => round((float) $lng, 7),
             'radius_m'    => (int) $radius,
             'timezone'    => $timezone,
+            'start_time'  => $startTime === '' ? null : $startTime . ':00',
             'status'      => $status,
         ];
     }

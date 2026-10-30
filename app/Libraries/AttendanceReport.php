@@ -94,13 +94,15 @@ final class AttendanceReport
         $days = [];
         foreach ($sessions as $session) {
             $date = $session['attendanceDate'];
-            $day = $days[$date] ?? ['date' => $date, 'sessions' => 0, 'totalSeconds' => 0, 'firstCheckIn' => null, 'lastCheckOut' => null, 'openSessions' => 0, 'exceptions' => []];
+            $day = $days[$date] ?? ['date' => $date, 'sessions' => 0, 'totalSeconds' => 0, 'firstCheckIn' => null, 'lateMinutes' => null, 'isLate' => false, 'lastCheckOut' => null, 'openSessions' => 0, 'exceptions' => []];
             $day['sessions']++;
             $day['totalSeconds'] += $session['durationSeconds'];
             $checkIn = $session['checkIn']['at'];
             $checkOut = $session['checkOut']['at'] ?? null;
             if ($day['firstCheckIn'] === null || $checkIn < $day['firstCheckIn']) {
                 $day['firstCheckIn'] = $checkIn;
+                $day['lateMinutes'] = $session['lateMinutes'];
+                $day['isLate'] = $session['isLate'];
             }
             if ($checkOut !== null && ($day['lastCheckOut'] === null || $checkOut > $day['lastCheckOut'])) {
                 $day['lastCheckOut'] = $checkOut;
@@ -124,6 +126,7 @@ final class AttendanceReport
             'totalSeconds'       => $seconds,
             'totalHours'         => round($seconds / 3600, 2),
             'daysWithExceptions' => count(array_filter($days, fn ($day) => $day['exceptions'] !== [])),
+            'daysLate'           => count(array_filter($days, fn ($day) => $day['isLate'])),
             'openSessions'       => array_sum(array_column($days, 'openSessions')),
         ];
     }

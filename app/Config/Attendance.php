@@ -27,6 +27,9 @@ class Attendance extends BaseConfig
     /** A silence longer than this inside a session is reported as an interruption (seconds). */
     public int $gapThresholdSeconds = 600;
 
+    /** Check-ins up to this many minutes after a project's start time are on time. */
+    public int $lateGraceMinutes = 10;
+
     /** Project timezone used when a project does not set one. */
     public string $defaultTimezone = 'Asia/Karachi';
 

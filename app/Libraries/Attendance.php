@@ -79,12 +79,14 @@ final class Attendance
         }
 
         $now = Clock::now();
+        $localNow = new DateTimeImmutable('now', new DateTimeZone($project['timezone']));
         $id = bin2hex(random_bytes(16));
         $row = [
             'id'                  => $id,
             'employee_id'         => $employee['id'],
             'project_id'          => $project['id'],
-            'attendance_date'     => (new DateTimeImmutable('now', new DateTimeZone($project['timezone'])))->format('Y-m-d'),
+            'attendance_date'     => $localNow->format('Y-m-d'),
+            'late_minutes'        => $this->lateMinutes($project, $localNow),
             'status'              => 'active',
             'check_in_at'         => $now,
             'check_in_lat'        => $fix['latitude'],
@@ -321,6 +323,17 @@ final class Attendance
     private function eventId(mixed $value): ?string
     {
         return is_string($value) && preg_match('/^[A-Za-z0-9_-]{8,64}$/', $value) ? $value : null;
+    }
+
+    /** Minutes after the project start time, or 0 when on time (within grace). Null when the project has no start time. */
+    private function lateMinutes(array $project, DateTimeImmutable $localNow): ?int
+    {
+        if ($project['start_time'] === null) {
+            return null;
+        }
+        $start = new DateTimeImmutable($localNow->format('Y-m-d') . ' ' . $project['start_time'], $localNow->getTimezone());
+        $minutes = intdiv(max(0, $localNow->getTimestamp() - $start->getTimestamp()), 60);
+        return $minutes > $this->config->lateGraceMinutes ? $minutes : 0;
     }
 
     private function distance(array $project, array $fix): float

@@ -9,6 +9,7 @@ use App\Libraries\AttendanceException;
 use App\Libraries\Clock;
 use App\Models\AttendanceSessionModel;
 use App\Models\ProjectAssignmentModel;
+use App\Models\ProjectModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class Attendance extends BaseApiController
@@ -31,7 +32,8 @@ class Attendance extends BaseApiController
             'id'       => $p['id'],
             'name'     => $p['name'],
             'address'  => $p['address'],
-            'timezone' => $p['timezone'],
+            'timezone'  => $p['timezone'],
+            'startTime' => ProjectModel::formatStartTime($p['start_time']),
         ], $projects)]);
     }
 

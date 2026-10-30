@@ -41,6 +41,10 @@ function timeAgo(iso){
   if(s<86400)return `${Math.floor(s/3600)} h ago`;
   return fmtTime(iso);
 }
+function lateBadge(minutes,late){
+  if(minutes===null||minutes===undefined)return '—';
+  return late?`<span class="badge badge-expense">${fmtDuration(minutes*60)} late</span>`:'<span class="badge badge-income">On time</span>';
+}
 function timezones(){
   return typeof Intl.supportedValuesOf==='function'?Intl.supportedValuesOf('timeZone'):['Asia/Karachi','UTC'];
 }
@@ -59,7 +63,7 @@ function renderProjectsPage(){
     const emps=p.assignedEmployees.map(e=>`<span class="badge badge-neutral" style="margin:1px">${esc(e.name)}</span>`).join('');
     return `<tr><td><strong>${esc(p.name)}</strong><div style="font-size:12px;color:#8896a6">${esc(p.description)}</div></td>
       <td>${esc(p.address)||'—'}</td>
-      <td style="white-space:nowrap">${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}<div style="font-size:12px;color:#8896a6">${p.radiusM} m · ${esc(p.timezone)}</div></td>
+      <td style="white-space:nowrap">${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}<div style="font-size:12px;color:#8896a6">${p.radiusM} m · ${esc(p.timezone)}${p.startTime?` · starts ${p.startTime}`:''}</div></td>
       <td>${emps||'<span style="color:#8896a6">None</span>'}</td>
       <td><span class="badge ${p.status==='active'?'badge-income':'badge-neutral'}">${p.status}</span></td>
       <td style="white-space:nowrap"><button class="link-btn" onclick="projectForm('${p.id}')"><i class="fa-solid fa-pen-to-square"></i></button>
@@ -78,7 +82,7 @@ function renderProjectsPage(){
 
 function projectBody(p){
   return {name:p.name,description:p.description,address:p.address,latitude:p.latitude,longitude:p.longitude,
-    radiusM:p.radiusM,timezone:p.timezone,status:p.status};
+    radiusM:p.radiusM,timezone:p.timezone,startTime:p.startTime,status:p.status};
 }
 
 async function toggleProject(id){
@@ -107,7 +111,8 @@ function projectForm(id){
         <div><label>Longitude *</label><input id="pLng" type="number" step="any" min="-180" max="180" value="${p.longitude}" required onchange="movePin()"></div>
         <div><label>Radius (m) *</label><input id="pRadius" type="number" min="10" max="5000" value="${p.radiusM}" required oninput="resizePin()"></div>
       </div>
-      <label>Timezone</label><select id="pTz">${tzOpts}</select>
+      <div class="row-inline"><div><label>Timezone</label><select id="pTz">${tzOpts}</select></div>
+        <div><label>Start Time</label><input id="pStart" type="time" value="${p.startTime||''}"></div></div>
       <label style="margin-top:14px">Assigned Employees</label>
       <div class="checklist">${emps}</div>
       <div class="modal-actions"><button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
@@ -158,6 +163,7 @@ async function saveProject(e,id){
     longitude:Number(document.getElementById('pLng').value),
     radiusM:Number(document.getElementById('pRadius').value),
     timezone:document.getElementById('pTz').value,
+    startTime:document.getElementById('pStart').value,
     status:document.getElementById('pStatus').value,
   };
   const saved=await api(id?'projects/'+id:'projects',id?'PUT':'POST',body);
@@ -192,10 +198,10 @@ function renderAttendancePage(){
     const s=r.session,badge=STATUS_BADGE[r.status];
     const leave=r.leave?`<div style="font-size:12px;color:#8896a6">${esc(r.leave.typeName)} · ${dateStr(r.leave.startDate)} – ${dateStr(r.leave.endDate)}</div>`:'';
     const track=TRACKING_BADGE[s?.lastLocation?.state]||TRACKING_BADGE.unavailable;
-    return `<tr><td><strong>${esc(r.name)}</strong><div style="font-size:12px;color:#8896a6">${esc(r.designation)}</div></td>
+    return `<tr><td><button class="link-btn" onclick="openEmployeeReport('${r.id}','${af.date}')"><strong>${esc(r.name)}</strong></button><div style="font-size:12px;color:#8896a6">${esc(r.designation)}</div></td>
       <td><span class="badge ${badge[0]}">${badge[1]}</span>${leave}</td>
       <td>${s?esc(s.projectName):'—'}</td>
-      <td style="white-space:nowrap">${s?fmtTime(s.checkIn.at,s.projectTimezone):'—'}</td>
+      <td style="white-space:nowrap">${s?fmtTime(s.checkIn.at,s.projectTimezone):'—'}${s&&s.lateMinutes!==null?`<div>${lateBadge(s.lateMinutes,s.isLate)}</div>`:''}</td>
       <td style="white-space:nowrap">${s?fmtDuration(s.durationSeconds):'—'}</td>
       <td style="white-space:nowrap">${r.status==='checked_in'?timeAgo(s.lastLocation.at):'—'}</td>
       <td>${r.status==='checked_in'?`<span class="badge ${track[0]}">${track[1]}</span>`:'—'}</td>
@@ -283,6 +289,11 @@ async function fetchAttendanceReport(){
 }
 
 function setAttReport(key,value){arf[key]=value;invalidateRemote('attreport');render();}
+function openEmployeeReport(employeeId,date){
+  arf={month:date.slice(0,7),employeeId};
+  invalidateRemote('attreport');
+  navigate('attreport');
+}
 
 function renderAttendanceReportPage(){
   const d=remoteSlot('attreport').data;
@@ -301,26 +312,26 @@ function renderAttendanceReportPage(){
 
 function summaryReportHtml(d){
   const rows=d.employees||[];
-  const total=rows.reduce((t,r)=>({days:t.days+r.daysPresent,sessions:t.sessions+r.sessions,seconds:t.seconds+r.totalSeconds}),{days:0,sessions:0,seconds:0});
-  return `<table class="list-table"><thead><tr><th>Employee</th><th>Designation</th><th>Days present</th><th>Sessions</th><th>Total on site</th><th>Days with exceptions</th></tr></thead>
+  const total=rows.reduce((t,r)=>({days:t.days+r.daysPresent,sessions:t.sessions+r.sessions,seconds:t.seconds+r.totalSeconds,late:t.late+r.daysLate}),{days:0,sessions:0,seconds:0,late:0});
+  return `<table class="list-table"><thead><tr><th>Employee</th><th>Designation</th><th>Days present</th><th>Sessions</th><th>Total on site</th><th>Days late</th><th>Days with exceptions</th></tr></thead>
     <tbody>${rows.map(r=>`<tr><td><button class="link-btn" onclick="setAttReport('employeeId','${r.employeeId}')"><strong>${esc(r.name)}</strong></button></td>
-      <td>${esc(r.designation)||'—'}</td><td>${r.daysPresent}</td><td>${r.sessions}</td><td style="white-space:nowrap">${fmtDuration(r.totalSeconds)}</td><td>${r.daysWithExceptions}</td></tr>`).join('')||EMPTY_ROW(6,'No employees.')}</tbody>
-    ${rows.length?`<tfoot><tr style="background:#f7f9fc"><td colspan="2" style="font-weight:800;padding:10px 14px">TOTAL</td><td style="font-weight:800">${total.days}</td><td style="font-weight:800">${total.sessions}</td><td style="font-weight:800;white-space:nowrap">${fmtDuration(total.seconds)}</td><td></td></tr></tfoot>`:''}</table>`;
+      <td>${esc(r.designation)||'—'}</td><td>${r.daysPresent}</td><td>${r.sessions}</td><td style="white-space:nowrap">${fmtDuration(r.totalSeconds)}</td><td>${r.daysLate}</td><td>${r.daysWithExceptions}</td></tr>`).join('')||EMPTY_ROW(7,'No employees.')}</tbody>
+    ${rows.length?`<tfoot><tr style="background:#f7f9fc"><td colspan="2" style="font-weight:800;padding:10px 14px">TOTAL</td><td style="font-weight:800">${total.days}</td><td style="font-weight:800">${total.sessions}</td><td style="font-weight:800;white-space:nowrap">${fmtDuration(total.seconds)}</td><td style="font-weight:800">${total.late}</td><td></td></tr></tfoot>`:''}</table>`;
 }
 
 function employeeReportHtml(d){
   if(!d.employee)return '<p style="color:#8896a6">Could not load this report.</p>';
   const s=d.summary,tz=d.timezone;
   const card=(label,value)=>`<div class="s-card net" style="padding:13px 16px"><div class="label">${label}</div><div class="value" style="font-size:17px;margin-top:4px">${value}</div></div>`;
-  const dayRows=d.days.map(x=>`<tr><td style="white-space:nowrap">${dateStr(x.date)}</td><td>${fmtTime(x.firstCheckIn,tz)}</td><td>${fmtTime(x.lastCheckOut,tz)}</td>
+  const dayRows=d.days.map(x=>`<tr><td style="white-space:nowrap">${dateStr(x.date)}</td><td>${fmtTime(x.firstCheckIn,tz)}</td><td>${lateBadge(x.lateMinutes,x.isLate)}</td><td>${fmtTime(x.lastCheckOut,tz)}</td>
     <td>${x.sessions}</td><td style="white-space:nowrap">${fmtDuration(x.totalSeconds)}</td>
     <td>${x.openSessions?'<span class="badge badge-warn" style="margin:1px">No check-out</span>':''}${x.exceptions.map(e=>`<span class="badge badge-warn" style="margin:1px">${esc(e)}</span>`).join('')||''}${!x.openSessions&&!x.exceptions.length?'—':''}</td></tr>`).join('');
   return `<h3 style="margin:16px 0 10px;color:var(--primary)">${esc(d.employee.name)}${d.employee.designation?` · ${esc(d.employee.designation)}`:''} · Shift ${d.employee.shiftHours} h — ${d.month}</h3>
     <div class="summary-cards" style="gap:10px;margin-bottom:14px">
-      ${card('Days present',s.daysPresent)}${card('Sessions',s.sessions)}${card('Total on site',fmtDuration(s.totalSeconds))}${card('Total hours',s.totalHours.toFixed(2))}${card('Days with exceptions',s.daysWithExceptions)}
+      ${card('Days present',s.daysPresent)}${card('Sessions',s.sessions)}${card('Total on site',fmtDuration(s.totalSeconds))}${card('Total hours',s.totalHours.toFixed(2))}${card('Days late',s.daysLate)}${card('Days with exceptions',s.daysWithExceptions)}
     </div>
-    <table class="list-table"><thead><tr><th>Date</th><th>First check-in</th><th>Last check-out</th><th>Sessions</th><th>On site</th><th>Exceptions</th></tr></thead>
-    <tbody>${dayRows||EMPTY_ROW(6,'No attendance recorded this month.')}</tbody></table>`;
+    <table class="list-table"><thead><tr><th>Date</th><th>First check-in</th><th>Late</th><th>Last check-out</th><th>Sessions</th><th>On site</th><th>Exceptions</th></tr></thead>
+    <tbody>${dayRows||EMPTY_ROW(7,'No attendance recorded this month.')}</tbody></table>`;
 }
 
 function exportAttendanceReport(){
@@ -328,12 +339,12 @@ function exportAttendanceReport(){
   if(!d?.days&&!d?.employees)return;
   let rows,name;
   if(arf.employeeId){
-    rows=[['Date','First check-in','Last check-out','Sessions','On site (h)','Exceptions'],
-      ...d.days.map(x=>[x.date,x.firstCheckIn||'',x.lastCheckOut||'',x.sessions,(x.totalSeconds/3600).toFixed(2),x.exceptions.join(' ')])];
+    rows=[['Date','First check-in','Late (min)','Last check-out','Sessions','On site (h)','Exceptions'],
+      ...d.days.map(x=>[x.date,x.firstCheckIn||'',x.lateMinutes??'',x.lastCheckOut||'',x.sessions,(x.totalSeconds/3600).toFixed(2),x.exceptions.join(' ')])];
     name=`attendance-${d.employee.name}-${arf.month}`;
   }else{
-    rows=[['Employee','Designation','Days present','Sessions','On site (h)','Days with exceptions'],
-      ...d.employees.map(r=>[r.name,r.designation,r.daysPresent,r.sessions,(r.totalSeconds/3600).toFixed(2),r.daysWithExceptions])];
+    rows=[['Employee','Designation','Days present','Sessions','On site (h)','Days late','Days with exceptions'],
+      ...d.employees.map(r=>[r.name,r.designation,r.daysPresent,r.sessions,(r.totalSeconds/3600).toFixed(2),r.daysLate,r.daysWithExceptions])];
     name=`attendance-summary-${arf.month}`;
   }
   const csv=rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');

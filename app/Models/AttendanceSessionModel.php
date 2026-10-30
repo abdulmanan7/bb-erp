@@ -16,7 +16,7 @@ class AttendanceSessionModel extends Model
     protected $allowedFields = [
         'id', 'employee_id', 'project_id', 'attendance_date', 'status',
         'check_in_at', 'check_in_lat', 'check_in_lng', 'check_in_accuracy', 'check_in_distance_m',
-        'check_in_inside', 'check_in_event_id', 'check_in_device',
+        'check_in_inside', 'check_in_event_id', 'check_in_device', 'late_minutes',
         'check_out_at', 'check_out_lat', 'check_out_lng', 'check_out_accuracy', 'check_out_distance_m',
         'check_out_inside', 'check_out_event_id', 'duration_seconds', 'exceptions',
         'last_location_at', 'last_lat', 'last_lng', 'last_distance_m', 'last_inside', 'last_delayed',
@@ -44,7 +44,7 @@ class AttendanceSessionModel extends Model
     {
         $q = $this->db->table('attendance_sessions s')
             ->select("s.*, e.name AS employee_name, e.designation AS employee_designation, e.shift_hours AS employee_shift_hours,
-                p.name AS project_name, p.timezone AS project_timezone, p.latitude AS project_lat,
+                p.name AS project_name, p.timezone AS project_timezone, p.start_time AS project_start_time, p.latitude AS project_lat,
                 p.longitude AS project_lng, p.radius_m AS project_radius_m,
                 (pa.status = 'active') AS assignment_active")
             ->join('employees e', 'e.id = s.employee_id', 'left')
@@ -82,12 +82,15 @@ class AttendanceSessionModel extends Model
             'projectId'        => $r['project_id'],
             'projectName'      => $r['project_name'] ?? '',
             'projectTimezone'  => $r['project_timezone'] ?? '',
+            'projectStartTime' => ProjectModel::formatStartTime($r['project_start_time'] ?? null),
             'attendanceDate'   => $r['attendance_date'],
             'status'           => $r['status'],
             'assignmentActive' => (bool) ($r['assignment_active'] ?? false),
             'checkIn'          => self::point($r, 'check_in', $admin),
             'checkOut'         => self::point($r, 'check_out', $admin),
             'durationSeconds'  => (int) $r['duration_seconds'],
+            'lateMinutes'      => $r['late_minutes'] === null ? null : (int) $r['late_minutes'],
+            'isLate'           => (int) $r['late_minutes'] > 0,
             'exceptions'       => array_values(array_filter(explode(',', (string) $r['exceptions']))),
         ];
         if ($admin) {

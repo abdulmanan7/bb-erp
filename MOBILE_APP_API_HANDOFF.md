@@ -95,7 +95,7 @@ Use `serverTime` to detect a skewed device clock.
 `GET /mobile/projects` returns the projects the employee may check in to: active projects with an active assignment.
 
 ```json
-{ "projects": [ { "id": "...", "name": "Site A", "address": "...", "timezone": "Asia/Karachi" } ] }
+{ "projects": [ { "id": "...", "name": "Site A", "address": "...", "timezone": "Asia/Karachi", "startTime": "20:00" } ] }
 ```
 
 Project coordinates and radius are deliberately not returned. The geofence is enforced on the server only.
@@ -147,15 +147,23 @@ Project coordinates and radius are deliberately not returned. The geofence is en
   "projectId": "...",
   "projectName": "Site A",
   "projectTimezone": "Asia/Karachi",
+  "projectStartTime": "20:00",
   "attendanceDate": "2026-10-27",
   "status": "active | closed",
   "assignmentActive": true,
   "checkIn":  { "at": "...Z", "accuracy": 8, "distanceM": 15.01, "inside": true },
   "checkOut": { "at": "...Z", "accuracy": 9, "distanceM": 5100.38, "inside": false } ,
   "durationSeconds": 3600,
+  "lateMinutes": 60,
+  "isLate": true,
   "exceptions": ["OUTSIDE_BOUNDARY", "MOCKED_LOCATION"]
 }
 ```
+
+- `startTime` on a project and `projectStartTime` on a session are the project's start time in `HH:MM` (project timezone). They are `null` when the project has no start time. Show "Starts 20:00" on the project and attendance screens.
+- `lateMinutes` is how many minutes after the project's start time the employee checked in. `0` means on time. It is `null` when the project has no start time.
+- `isLate` is `true` only when the check-in is beyond the 10-minute grace period. Show "Late by 1h 00m" when `isLate` is true.
+- Lateness is set at check-in and does not change later.
 
 - `durationSeconds` is **on-site time**: time spent inside the project boundary, from location points. It is recalculated as location batches arrive, so it is not a live timer. Label it "On site", not "Elapsed".
 - `checkOut` is `null` while the session is active.
