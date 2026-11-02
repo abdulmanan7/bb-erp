@@ -280,12 +280,12 @@ function renderDashboard(){
 
 function viewHeadVouchers(headId){
   const {from,to}=dashRange();
-  vf={q:'',type:'All',heads:[headId],sub:'All',status:'All',by:'All',from,to,page:1,perPage:vf.perPage};
+  vf={q:'',type:'All',heads:[headId],sub:'All',status:[],by:'All',from,to,page:1,perPage:vf.perPage};
   navigate('vouchers');
 }
 function viewTypeVouchers(type,from,to){
   const r=dashRange();
-  vf={q:'',type:type==='All'?'All':type,heads:[],sub:'All',status:'All',by:'All',from:from===undefined?r.from:from,to:to===undefined?r.to:to,page:1,perPage:vf.perPage};
+  vf={q:'',type:type==='All'?'All':type,heads:[],sub:'All',status:[],by:'All',from:from===undefined?r.from:from,to:to===undefined?r.to:to,page:1,perPage:vf.perPage};
   navigate('vouchers');
 }
 
@@ -520,13 +520,13 @@ async function deleteEmployee(id){
 /* ═══════════════════════════════════════════════════
    VOUCHERS
 ═══════════════════════════════════════════════════ */
-let vf={q:'',type:'All',heads:[],sub:'All',status:'All',by:'All',from:'',to:'',page:1,perPage:20};
+let vf={q:'',type:'All',heads:[],sub:'All',status:[],by:'All',from:'',to:'',page:1,perPage:20};
 
 function filteredVouchers(){
   const q=vf.q.toLowerCase();
   return db.vouchers.filter(v=>{
     if(vf.type!=='All'&&v.type!==vf.type)return false;
-    if(vf.status!=='All'&&(v.status||'paid')!==vf.status)return false;
+    if(vf.status.length&&!vf.status.includes(v.status||'paid'))return false;
     if(vf.by!=='All'&&v.createdBy!==vf.by)return false;
     if(vf.heads.length&&!vf.heads.includes(v.headId))return false;
     if(vf.sub!=='All'&&v.subHeadId!==vf.sub)return false;
@@ -619,6 +619,21 @@ function vfHeadSync(){
   applyVoucherFilters();
 }
 
+const VOUCHER_STATUSES=[['pending','Pending'],['partial','Partial'],['paid','Paid']];
+function vfStatusToggle(){document.getElementById('vfStatusPanel').classList.toggle('hidden');}
+function vfStatusToggleAll(cb){document.querySelectorAll('.vfStatusChk').forEach(c=>c.checked=cb.checked);vfStatusSync();}
+function vfStatusLabel(){
+  if(!vf.status.length)return 'All Statuses';
+  return vf.status.map(s=>VOUCHER_STATUSES.find(([k])=>k===s)[1]).join(', ');
+}
+function vfStatusSync(){
+  const checked=[...document.querySelectorAll('.vfStatusChk:checked')].map(c=>c.value);
+  vf.status=checked.length===VOUCHER_STATUSES.length?[]:checked;
+  document.getElementById('vfStatusAll').checked=checked.length===VOUCHER_STATUSES.length;
+  document.getElementById('vfStatusLabel').textContent=vfStatusLabel();
+  applyVoucherFilters();
+}
+
 function vouchPageSlice(rows){
   const per=vf.perPage==='all'?Math.max(rows.length,1):vf.perPage;
   const pages=Math.max(1,Math.ceil(rows.length/per));
@@ -655,7 +670,7 @@ function vfSetPer(v){vf.perPage=v==='all'?'all':parseInt(v);vf.page=1;renderVouc
 function applyVoucherFilters(){
   const subSel=document.getElementById('vfSub');
   vf={q:document.getElementById('vfQ').value.trim(),type:document.getElementById('vfType').value,
-      heads:vf.heads,sub:subSel.value||'All',status:document.getElementById('vfStatus').value,by:document.getElementById('vfBy').value,
+      heads:vf.heads,sub:subSel.value||'All',status:vf.status,by:document.getElementById('vfBy').value,
       from:document.getElementById('vfFrom').value,to:document.getElementById('vfTo').value,
       page:1,perPage:vf.perPage};
   subSel.innerHTML=vfSubOptions();
@@ -665,7 +680,7 @@ function applyVoucherFilters(){
 }
 
 function clearVoucherFilters(){
-  vf={q:'',type:'All',heads:[],sub:'All',status:'All',by:'All',from:'',to:'',page:1,perPage:20};
+  vf={q:'',type:'All',heads:[],sub:'All',status:[],by:'All',from:'',to:'',page:1,perPage:20};
   render();
 }
 
@@ -700,8 +715,15 @@ function renderVouchersPage(){
             </div>
           </div>
         </div>
-        <div style="min-width:110px"><label>Status</label><select id="vfStatus" onchange="applyVoucherFilters()">
-          <option ${vf.status==='All'?'selected':''}>All</option><option value="pending" ${vf.status==='pending'?'selected':''}>Pending</option><option value="partial" ${vf.status==='partial'?'selected':''}>Partial</option><option value="paid" ${vf.status==='paid'?'selected':''}>Paid</option></select></div>
+        <div style="min-width:150px"><label>Status</label>
+          <div class="ms-wrap">
+            <button type="button" class="ms-btn" onclick="vfStatusToggle()"><span id="vfStatusLabel">${vfStatusLabel()}</span><i class="fa-solid fa-chevron-down"></i></button>
+            <div class="ms-panel hidden" id="vfStatusPanel">
+              <label class="chk"><input type="checkbox" id="vfStatusAll" ${!vf.status.length?'checked':''} onchange="vfStatusToggleAll(this)">All Statuses</label>
+              ${VOUCHER_STATUSES.map(([k,label])=>`<label class="chk"><input type="checkbox" class="vfStatusChk" value="${k}" ${vf.status.includes(k)?'checked':''} onchange="vfStatusSync()">${label}</label>`).join('')}
+            </div>
+          </div>
+        </div>
         <div style="min-width:130px"><label>From</label><input type="date" id="vfFrom" value="${vf.from}" onchange="applyVoucherFilters()"></div>
         <div style="min-width:130px"><label>To</label><input type="date" id="vfTo" value="${vf.to}" onchange="applyVoucherFilters()"></div>
         <div style="flex:0;min-width:auto;display:flex;gap:8px"><button class="btn-secondary" onclick="exportVoucherPdf()"><i class="fa-solid fa-file-pdf"></i> PDF</button><button class="btn-secondary" onclick="exportVoucherCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
@@ -1999,7 +2021,7 @@ function listingPdf(title,subtitle,thead,bodyHtml,tfootHtml,filename,width){
 
 function exportVoucherPdf(){
   const rows=filteredVouchers();
-  const sub=`Type: ${vf.type} • Status: ${vf.status} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.heads.length?` • Heads: ${esc(vfHeadsLabel())}`:''}${vf.by!=='All'?` • By: ${esc(vf.by)}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
+  const sub=`Type: ${vf.type} • Status: ${vfStatusLabel()} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.heads.length?` • Heads: ${esc(vfHeadsLabel())}`:''}${vf.by!=='All'?` • By: ${esc(vf.by)}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
   const cols=vouchCols();
   const body=rows.map(v=>`<tr>${cols.map(c=>c.td(v)).join('')}</tr>`).join('');
   const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
