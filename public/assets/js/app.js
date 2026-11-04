@@ -522,6 +522,8 @@ async function deleteEmployee(id){
 ═══════════════════════════════════════════════════ */
 let vf={q:'',type:'All',heads:[],sub:'All',status:[],by:'All',from:'',to:'',page:1,perPage:20};
 
+let vSel=new Set();
+
 function filteredVouchers(){
   const q=vf.q.toLowerCase();
   return db.vouchers.filter(v=>{
@@ -552,8 +554,28 @@ function vStatusBadge(v){
     :v.status==='partial'?'<span class="badge badge-neutral">Partial</span>'
     :'<span class="badge badge-income">Paid</span>';
 }
+function selectedVouchers(){return db.vouchers.filter(v=>vSel.has(v.id));}
+function vSelToggle(id,on){on?vSel.add(id):vSel.delete(id);renderVouchTable();}
+function vSelPageToggle(on){vouchPageSlice(filteredVouchers()).slice.forEach(v=>on?vSel.add(v.id):vSel.delete(v.id));renderVouchTable();}
+function vSelClear(){vSel.clear();renderVouchTable();}
+function vouchHeadHtml(slice){
+  const allOnPage=slice.length>0&&slice.every(v=>vSel.has(v.id));
+  return `<tr><th style="width:36px"><input type="checkbox" title="Select all on this page" ${allOnPage?'checked':''} onchange="vSelPageToggle(this.checked)"></th>${vouchCols().map(c=>`<th${c.num?' style="text-align:right"':''}>${c.label}</th>`).join('')}<th>Actions</th></tr>`;
+}
+function vSelBarHtml(){
+  const n=selectedVouchers().length;
+  if(!n)return '';
+  const btn='style="padding:7px 12px;font-size:13px"';
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#f0f6fb;border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:0 0 10px">
+    <strong style="margin-right:auto">${n} selected</strong>
+    <button class="btn-secondary" ${btn} onclick="exportVoucherPdf(selectedVouchers())"><i class="fa-solid fa-file-pdf"></i> Download PDF</button>
+    <button class="btn-secondary" ${btn} onclick="exportVoucherCsv(selectedVouchers())"><i class="fa-solid fa-file-csv"></i> Download CSV</button>
+    ${session.role==='admin'?`<button class="btn-secondary" ${btn} style="padding:7px 12px;font-size:13px;color:#c0392b" onclick="bulkDeleteVouchers()"><i class="fa-solid fa-trash"></i> Delete</button>`:''}
+    <button class="btn-secondary" ${btn} onclick="vSelClear()">Clear</button></div>`;
+}
+
 function voucherRowHtml(v){
-  return `<tr>${vouchCols().map(c=>c.td(v)).join('')}
+  return `<tr><td><input type="checkbox" ${vSel.has(v.id)?'checked':''} onchange="vSelToggle('${v.id}',this.checked)"></td>${vouchCols().map(c=>c.td(v)).join('')}
   <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="viewVoucher('${v.id}')" title="View"><i class="fa-solid fa-eye"></i></button> <button class="link-btn" onclick="payVoucherModal('${v.id}')" title="Payments"><i class="fa-solid fa-coins"></i></button> <button class="link-btn" onclick="openVoucherPrint('${v.id}')" title="Print view"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="downloadVoucherPdf('${v.id}')" title="Download PDF"><i class="fa-solid fa-file-arrow-down"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
 }
 
@@ -592,7 +614,7 @@ function vouchFootHtml(rows){
     if(!c.num)return '<td></td>';
     return `<td style="font-weight:800;padding:12px 14px;white-space:nowrap;text-align:right;color:${c.key==='in'?'#1e8449':c.key==='out'?'#c0392b':c.key==='due'?'#b8860b':'inherit'}">${money(rows.reduce((s,v)=>s+c.sum(v),0))}</td>`;
   }).join('');
-  return `<tr style="background:#f7f9fc">${cells}<td style="font-weight:800;padding:12px 14px;white-space:nowrap;color:${net<0?'#c0392b':'#1e8449'}" title="Balance (In − Out)">Balance ${money(net)}</td></tr>`;
+  return `<tr style="background:#f7f9fc"><td></td>${cells}<td style="font-weight:800;padding:12px 14px;white-space:nowrap;color:${net<0?'#c0392b':'#1e8449'}" title="Balance (In − Out)">Balance ${money(net)}</td></tr>`;
 }
 
 function vfSubOptions(){
@@ -657,8 +679,9 @@ function renderVouchTable(){
   const rows=filteredVouchers();
   const {slice,pages}=vouchPageSlice(rows);
   document.getElementById('vouchStats').innerHTML=vouchStatsHtml(rows);
-  document.getElementById('vouchHead').innerHTML=`<tr>${vouchCols().map(c=>`<th${c.num?' style="text-align:right"':''}>${c.label}</th>`).join('')}<th>Actions</th></tr>`;
-  document.getElementById('vouchBody').innerHTML=slice.map(voucherRowHtml).join('')||`<tr class="empty-row"><td colspan="${vouchCols().length+1}">No vouchers match the filters.</td></tr>`;
+  document.getElementById('vouchHead').innerHTML=vouchHeadHtml(slice);
+  document.getElementById('vouchSelBar').innerHTML=vSelBarHtml();
+  document.getElementById('vouchBody').innerHTML=slice.map(voucherRowHtml).join('')||`<tr class="empty-row"><td colspan="${vouchCols().length+2}">No vouchers match the filters.</td></tr>`;
   document.getElementById('vouchFoot').innerHTML=vouchFootHtml(rows);
   document.getElementById('vouchCount').textContent=vouchCountText(rows);
   document.getElementById('vouchPager').innerHTML=vouchPagerHtml(rows.length,pages);
@@ -735,9 +758,10 @@ function renderVouchersPage(){
       <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#5b6b7d;text-transform:none;letter-spacing:0">Show
         <select id="vfPer" style="width:auto;margin-top:0;padding:5px 8px;font-size:12.5px" onchange="vfSetPer(this.value)">${perOpts}</select> per page</label>
     </div>
+    <div id="vouchSelBar">${vSelBarHtml()}</div>
     <div style="overflow-x:auto"><table class="list-table">
-      <thead id="vouchHead"><tr>${vouchCols().map(c=>`<th${c.num?' style="text-align:right"':''}>${c.label}</th>`).join('')}<th>Actions</th></tr></thead>
-      <tbody id="vouchBody">${slice.map(voucherRowHtml).join('')||`<tr class="empty-row"><td colspan="${vouchCols().length+1}">No vouchers match the filters.</td></tr>`}</tbody>
+      <thead id="vouchHead">${vouchHeadHtml(slice)}</thead>
+      <tbody id="vouchBody">${slice.map(voucherRowHtml).join('')||`<tr class="empty-row"><td colspan="${vouchCols().length+2}">No vouchers match the filters.</td></tr>`}</tbody>
       <tfoot id="vouchFoot">${vouchFootHtml(rows)}</tfoot>
     </table></div>
     <div class="pager" id="vouchPager">${vouchPagerHtml(rows.length,pages)}</div>`);
@@ -1135,6 +1159,15 @@ async function deleteVoucher(id){
   if(!confirm(`Delete voucher ${v.no}?`))return;
   if(!await api('vouchers/'+id,'DELETE'))return;
   await loadState();render();toast('Voucher deleted.','warn');
+}
+
+async function bulkDeleteVouchers(){
+  const ids=selectedVouchers().map(v=>v.id);
+  if(!ids.length)return;
+  if(!confirm(`Delete ${ids.length} selected voucher${ids.length===1?'':'s'}? This also removes their payments and attachments and cannot be undone.`))return;
+  const res=await api('vouchers/bulk-delete','POST',{ids});
+  if(!res)return;
+  vSel.clear();await loadState();render();toast(`${res.deleted} voucher${res.deleted===1?'':'s'} deleted.`,'warn');
 }
 
 function openVoucherPrint(id){
@@ -2019,16 +2052,16 @@ function listingPdf(title,subtitle,thead,bodyHtml,tfootHtml,filename,width){
   setTimeout(()=>downloadPDF('docArea',`${printFilename}.pdf`),350);
 }
 
-function exportVoucherPdf(){
-  const rows=filteredVouchers();
-  const sub=`Type: ${vf.type} • Status: ${vfStatusLabel()} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.heads.length?` • Heads: ${esc(vfHeadsLabel())}`:''}${vf.by!=='All'?` • By: ${esc(vf.by)}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
+function exportVoucherPdf(selected){
+  const rows=selected||filteredVouchers();
+  const sub=selected?`Selected: ${rows.length} voucher${rows.length===1?'':'s'}`:`Type: ${vf.type} • Status: ${vfStatusLabel()} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.heads.length?` • Heads: ${esc(vfHeadsLabel())}`:''}${vf.by!=='All'?` • By: ${esc(vf.by)}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
   const cols=vouchCols();
   const body=rows.map(v=>`<tr>${cols.map(c=>c.td(v)).join('')}</tr>`).join('');
   const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
   const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
   const foot=`<tr>${cols.map((c,i)=>i===0?'<td style="text-align:right;font-weight:800">TOTAL</td>':c.num?`<td style="text-align:right;font-weight:800;white-space:nowrap;color:${c.key==='in'?'#1e8449':c.key==='out'?'#c0392b':c.key==='due'?'#b8860b':'inherit'}">${money(rows.reduce((s,v)=>s+c.sum(v),0))}</td>`:'<td></td>').join('')}</tr>
     <tr><td style="text-align:right;font-weight:800">BALANCE</td><td colspan="${cols.length-1}" style="text-align:right;font-weight:800;white-space:nowrap;color:${inc-exp>=0?'#1e8449':'#c0392b'}">${money(inc-exp)}</td></tr>`;
-  listingPdf('Voucher Register',sub,cols.map(c=>`<th${c.num?' style="text-align:right"':''}>${c.label}</th>`).join(''),body,foot,`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`,Math.min(1400,820+Math.max(0,cols.length-8)*85));
+  listingPdf('Voucher Register',sub,cols.map(c=>`<th${c.num?' style="text-align:right"':''}>${c.label}</th>`).join(''),body,foot,selected?'vouchers-selected':`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`,Math.min(1400,820+Math.max(0,cols.length-8)*85));
 }
 
 function exportSalaryPdf(){
@@ -2052,12 +2085,12 @@ function csvDownload(filename,rows){
   toast('CSV downloaded!');
 }
 
-function exportVoucherCsv(){
+function exportVoucherCsv(selected){
   const cols=vouchCols();
-  const rows=filteredVouchers().map(v=>{const r={};cols.forEach(c=>r[c.label]=c.val(v));return r;});
+  const rows=(selected||filteredVouchers()).map(v=>{const r={};cols.forEach(c=>r[c.label]=c.val(v));return r;});
   const total={};cols.forEach((c,i)=>total[c.label]=i===0?'TOTAL':c.num?rows.reduce((s,r)=>s+r[c.label],0):'');
   rows.push(total);
-  csvDownload(`vouchers-${vf.from||'all'}-to-${vf.to||'now'}.csv`,rows);
+  csvDownload(selected?'vouchers-selected.csv':`vouchers-${vf.from||'all'}-to-${vf.to||'now'}.csv`,rows);
 }
 
 function exportSalaryCsv(){

@@ -29,6 +29,7 @@ $routes->group('api', static function (RouteCollection $routes) {
     $routes->post('vouchers', 'Api\Vouchers::create', ['filter' => 'auth']);
     $routes->post('vouchers/(:segment)/payments', 'Api\Vouchers::addPayment/$1', ['filter' => 'auth']);
     $routes->delete('vouchers/payments/(:segment)', 'Api\Vouchers::deletePayment/$1', ['filter' => 'auth:admin']);
+    $routes->post('vouchers/bulk-delete', 'Api\Vouchers::bulkDelete', ['filter' => 'auth:admin']);
     $routes->put('vouchers/(:segment)', 'Api\Vouchers::update/$1', ['filter' => 'auth:admin']);
     $routes->delete('vouchers/(:segment)', 'Api\Vouchers::delete/$1', ['filter' => 'auth:admin']);
 

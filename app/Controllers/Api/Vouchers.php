@@ -127,14 +127,40 @@ class Vouchers extends BaseApiController
 
     public function delete($id = null): ResponseInterface
     {
-        $m = new VoucherModel();
-        if (! $m->find($id)) {
+        if (! (new VoucherModel())->find($id)) {
             return $this->fail('Voucher not found.', 404);
         }
-        $m->delete($id);
-        (new VoucherPaymentModel())->where('voucher_id', $id)->delete();
-        Attachments::delete('vouchers', $id);
+        $this->removeVouchers([$id]);
         return $this->json(['ok' => true]);
+    }
+
+    public function bulkDelete(): ResponseInterface
+    {
+        $ids = array_values(array_unique(array_filter((array) ($this->body()['ids'] ?? []), 'is_string')));
+        if ($ids === []) {
+            return $this->fail('Select at least one voucher.');
+        }
+        if (count($ids) > 500) {
+            return $this->fail('You can delete up to 500 vouchers at a time.');
+        }
+        $found = (array) ((new VoucherModel())->whereIn('id', $ids)->findColumn('id') ?? []);
+        $this->removeVouchers($found);
+        return $this->json(['deleted' => count($found)]);
+    }
+
+    private function removeVouchers(array $ids): void
+    {
+        if ($ids === []) {
+            return;
+        }
+        $db = db_connect();
+        $db->transStart();
+        (new VoucherModel())->whereIn('id', $ids)->delete();
+        (new VoucherPaymentModel())->whereIn('voucher_id', $ids)->delete();
+        $db->transComplete();
+        foreach ($ids as $id) {
+            Attachments::delete('vouchers', $id);
+        }
     }
 
     /**
