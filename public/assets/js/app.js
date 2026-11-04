@@ -1980,9 +1980,9 @@ async function downloadPDF(elId,filename){
   const noprint=[...el.querySelectorAll('.noprint')].map(n=>[n,n.style.display]);
   noprint.forEach(([n])=>n.style.display='none');
   try{
-    const scale=2;
+    const scale=3;
     const{jsPDF}=window.jspdf;
-    const pdf=new jsPDF('p','pt','a4');
+    const pdf=new jsPDF(el.dataset.orientation==='landscape'?'l':'p','pt','a4');
     const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
     const renderW=el.offsetWidth;          // DOM px width as rendered
     const pageDomH=ph*renderW/pw;          // DOM px that fit one PDF page
@@ -1990,7 +1990,6 @@ async function downloadPDF(elId,filename){
 
     // Element ranges (in DOM px, relative to the captured element) that must not be split
     const elRect=el.getBoundingClientRect();
-    const elDocTop=elRect.top+window.scrollY;
     const ranges=[...el.querySelectorAll('tr,img,h2,h3,h4,p,.s-card,.sign-row,.doc-header,.summary-cards')]
       .map(n=>{const r=n.getBoundingClientRect();return{top:r.top-elRect.top,bottom:r.bottom-elRect.top};});
 
@@ -2011,16 +2010,14 @@ async function downloadPDF(elId,filename){
       y=end;
     }
 
-    // Capture each page slice separately — keeps 2x sharpness and stays far under canvas limits
+    // Capture the element once and slice the canvas per page. Cropping inside html2canvas offsets each page and cuts off its top.
+    const full=await html2canvas(el,{scale,useCORS:true,logging:false,backgroundColor:'#fff'});
+    const k=full.height/totalDomH;
     for(let i=0;i<breaks.length-1;i++){
       const y0=breaks[i],h=breaks[i+1]-y0;
-      let seg=await html2canvas(el,{scale,y:elDocTop+y0,height:h,useCORS:true,logging:false,backgroundColor:'#fff'});
-      if(seg.height>Math.ceil(h*scale)+8){ // crop unsupported — slice the full capture instead
-        const t=document.createElement('canvas');
-        t.width=seg.width;t.height=Math.ceil(h*scale);
-        t.getContext('2d').drawImage(seg,0,Math.round(y0*scale),seg.width,t.height,0,0,seg.width,t.height);
-        seg=t;
-      }
+      const seg=document.createElement('canvas');
+      seg.width=full.width;seg.height=Math.round(h*k);
+      seg.getContext('2d').drawImage(full,0,Math.round(y0*k),full.width,seg.height,0,0,full.width,seg.height);
       if(i>0)pdf.addPage();
       pdf.addImage(seg.toDataURL('image/png'),'PNG',0,0,pw,h*pw/renderW);
     }
@@ -2037,7 +2034,7 @@ function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt
 
 function listingPdf(title,subtitle,thead,bodyHtml,tfootHtml,filename,width){
   printFilename=filename||title.replace(/\s+/g,'-');
-  printContent=`<div id="docArea" class="doc" style="padding:32px 36px;${width?`max-width:${width}px`:''}">${docHeader()}
+  printContent=`<div id="docArea" class="doc" data-orientation="landscape" style="padding:32px 36px;${width?`max-width:${width}px`:''}">${docHeader()}
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin:12px 0 4px">
       <h2 style="color:var(--primary);letter-spacing:.5px">${title}</h2>
       <span style="font-size:12px;color:#8896a6">${new Date().toLocaleString()}</span>
@@ -2061,7 +2058,7 @@ function exportVoucherPdf(selected){
   const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
   const foot=`<tr>${cols.map((c,i)=>i===0?'<td style="text-align:right;font-weight:800">TOTAL</td>':c.num?`<td style="text-align:right;font-weight:800;white-space:nowrap;color:${c.key==='in'?'#1e8449':c.key==='out'?'#c0392b':c.key==='due'?'#b8860b':'inherit'}">${money(rows.reduce((s,v)=>s+c.sum(v),0))}</td>`:'<td></td>').join('')}</tr>
     <tr><td style="text-align:right;font-weight:800">BALANCE</td><td colspan="${cols.length-1}" style="text-align:right;font-weight:800;white-space:nowrap;color:${inc-exp>=0?'#1e8449':'#c0392b'}">${money(inc-exp)}</td></tr>`;
-  listingPdf('Voucher Register',sub,cols.map(c=>`<th${c.num?' style="text-align:right"':''}>${c.label}</th>`).join(''),body,foot,selected?'vouchers-selected':`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`,Math.min(1400,820+Math.max(0,cols.length-8)*85));
+  listingPdf('Voucher Register',sub,cols.map(c=>`<th${c.num?' style="text-align:right"':''}>${c.label}</th>`).join(''),body,foot,selected?'vouchers-selected':`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`,Math.min(1100,820+Math.max(0,cols.length-8)*85));
 }
 
 function exportSalaryPdf(){
