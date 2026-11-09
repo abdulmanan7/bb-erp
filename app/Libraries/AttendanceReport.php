@@ -3,7 +3,6 @@
 namespace App\Libraries;
 
 use App\Models\AttendanceSessionModel;
-use Config\Attendance;
 use DateTimeImmutable;
 
 /** Builds per-day and per-month on-site totals from attendance sessions and their location trail. */
@@ -28,28 +27,23 @@ final class AttendanceReport
     }
 
     /**
-     * Seconds the employee was inside the project boundary. Time counts only between two consecutive
-     * inside points; gaps longer than the tracking threshold and any leg that leaves the site are excluded.
-     * Without any location points, a closed session counts check-in to check-out when both ends are inside.
-     * An open session (no check-out) stops counting at check-in plus the employee's shift length.
+     * Seconds on site. Time between two consecutive points counts when both ends are inside the boundary,
+     * however long the gap, so weak internet or a dead battery does not zero the day. Time after the last
+     * recorded point is not counted, and an auto-closed session has no check-out endpoint. A manual check-out
+     * counts from the last point when it is inside. An open session stops at check-in plus the shift length.
      */
     public static function onSiteSeconds(array $row, array $points): int
     {
-        if ($points === []) {
-            $closedInside = $row['check_out_at'] !== null && $row['check_in_inside'] && $row['check_out_inside'];
-            return $closedInside ? max(0, Clock::timestamp($row['check_out_at']) - Clock::timestamp($row['check_in_at'])) : 0;
-        }
-
+        $autoClosed = str_contains((string) $row['exceptions'], 'AUTO_CLOSED');
         $timeline = [[Clock::timestamp($row['check_in_at']), (bool) $row['check_in_inside']]];
         foreach ($points as $point) {
             $timeline[] = [Clock::timestamp($point['captured_at']), (bool) $point['inside_boundary']];
         }
-        if ($row['check_out_at'] !== null) {
+        if ($row['check_out_at'] !== null && ! $autoClosed) {
             $timeline[] = [Clock::timestamp($row['check_out_at']), (bool) $row['check_out_inside']];
         }
         usort($timeline, fn ($a, $b) => $a[0] <=> $b[0]);
 
-        $maxGap = config(Attendance::class)->gapThresholdSeconds;
         $deadline = $row['status'] === 'active'
             ? Clock::timestamp($row['check_in_at']) + (int) round(($row['employee_shift_hours'] ?? 8) * 3600)
             : null;
@@ -57,9 +51,8 @@ final class AttendanceReport
         for ($i = 1, $count = count($timeline); $i < $count; $i++) {
             [$from, $fromInside] = $timeline[$i - 1];
             [$to, $toInside] = $timeline[$i];
-            $gap = $to - $from;
-            if ($fromInside && $toInside && $gap > 0 && $gap <= $maxGap) {
-                $seconds += $deadline === null ? $gap : max(0, min($to, $deadline) - $from);
+            if ($fromInside && $toInside && $to > $from) {
+                $seconds += $deadline === null ? $to - $from : max(0, min($to, $deadline) - $from);
             }
         }
         return $seconds;
