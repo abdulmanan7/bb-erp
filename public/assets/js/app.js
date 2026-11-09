@@ -200,6 +200,17 @@ function dashRange(){
     to:dashTo||now.toISOString().slice(0,10),
   };
 }
+function paidInRange(from,to){
+  const paid=new Map();
+  (db.voucherPayments||[]).forEach(p=>{if(p.date>=from&&p.date<=to)paid.set(p.voucherId,(paid.get(p.voucherId)||0)+p.amount);});
+  return paid;
+}
+/* Vouchers with `amount` set to the cash actually paid within [from,to] (by payment date). */
+function vouchersInPeriod(from,to,includeDated=false){
+  const paid=paidInRange(from,to);
+  return db.vouchers.filter(v=>paid.has(v.id)||(includeDated&&v.date>=from&&v.date<=to))
+    .map(v=>({...v,amount:paid.get(v.id)||0}));
+}
 function applyDashRange(){
   dashFrom=document.getElementById('dashFrom').value;
   dashTo=document.getElementById('dashTo').value;
@@ -209,7 +220,7 @@ function applyDashRange(){
 function renderDashboard(){
   const now=new Date();
   const {from,to}=dashRange();
-  const tm=db.vouchers.filter(v=>v.date>=from&&v.date<=to);
+  const tm=vouchersInPeriod(from,to);
   const inc=tm.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const aInc=db.vouchers.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
@@ -295,7 +306,7 @@ function drawDashChart(){
   if(!cv||typeof Chart==='undefined')return;
   if(dashChart){dashChart.destroy();dashChart=null;}
   const {from,to}=dashRange();
-  const tm=db.vouchers.filter(v=>v.date>=from&&v.date<=to);
+  const tm=vouchersInPeriod(from,to);
   const inc=tm.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   dashChart=new Chart(cv,{type:'doughnut',
@@ -305,7 +316,7 @@ function drawDashChart(){
 
 function exportDashPdf(){
   const {from,to}=dashRange();
-  const tm=db.vouchers.filter(v=>v.date>=from&&v.date<=to);
+  const tm=vouchersInPeriod(from,to);
   const inc=tm.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const hAgg={};
@@ -1733,8 +1744,8 @@ const REP_COLS=[
   {key:'desc',label:'Description',val:v=>v.description||'',td:v=>`<td style="font-size:11.5px;color:#666">${v.description||'—'}</td>`},
   {key:'type',label:'Type',val:v=>v.type,td:v=>`<td>${v.type}</td>`},
   {key:'billed',label:'Billed',num:true,val:v=>v.total,sum:v=>v.total||0,td:v=>`<td style="text-align:right;white-space:nowrap;font-size:12.5px">${money(v.total)}</td>`},
-  {key:'in',label:'Cash In',num:true,val:v=>v.type==='Receipt'?v.paid:0,sum:v=>v.type==='Receipt'?v.amount:0,td:v=>`<td style="text-align:right;font-weight:600;white-space:nowrap;font-size:12.5px;color:#1e8449">${v.type==='Receipt'?money(v.amount):''}</td>`},
-  {key:'out',label:'Cash Out',num:true,val:v=>v.type==='Payment'?v.paid:0,sum:v=>v.type==='Payment'?v.amount:0,td:v=>`<td style="text-align:right;font-weight:600;white-space:nowrap;font-size:12.5px;color:#c0392b">${v.type==='Payment'?money(v.amount):''}</td>`},
+  {key:'in',label:'Cash In',num:true,val:v=>v.type==='Receipt'?v.amount:0,sum:v=>v.type==='Receipt'?v.amount:0,td:v=>`<td style="text-align:right;font-weight:600;white-space:nowrap;font-size:12.5px;color:#1e8449">${v.type==='Receipt'?money(v.amount):''}</td>`},
+  {key:'out',label:'Cash Out',num:true,val:v=>v.type==='Payment'?v.amount:0,sum:v=>v.type==='Payment'?v.amount:0,td:v=>`<td style="text-align:right;font-weight:600;white-space:nowrap;font-size:12.5px;color:#c0392b">${v.type==='Payment'?money(v.amount):''}</td>`},
   {key:'due',label:'Due',num:true,val:v=>v.total-v.paid,sum:v=>v.total-v.paid,td:v=>`<td style="text-align:right;white-space:nowrap;font-size:12.5px;color:#b8860b">${v.total-v.paid>0?money(v.total-v.paid):''}</td>`},
   {key:'status',label:'Status',val:v=>v.status,td:v=>`<td>${vStatusBadge(v)}</td>`},
   {key:'by',label:'Created By',val:v=>v.createdBy||'',td:v=>`<td>${v.createdBy||'—'}</td>`},
@@ -1820,7 +1831,7 @@ function generateReport(){
   const repHeads=[...document.querySelectorAll('.repHeadChk:checked')].map(c=>c.value);
   const repSubs=new Set([...document.querySelectorAll('.repSubChk:checked')].map(c=>c.value));
   const subChkCount=document.querySelectorAll('.repSubChk').length;
-  let rows=db.vouchers.filter(v=>v.date>=fromStr&&v.date<=toStr);
+  let rows=vouchersInPeriod(fromStr,toStr,true);
   if(repType==='Expense')rows=rows.filter(v=>v.type==='Payment');
   if(repType==='Income')rows=rows.filter(v=>v.type==='Receipt');
   if(repBy!=='All')rows=rows.filter(v=>v.createdBy===repBy);
