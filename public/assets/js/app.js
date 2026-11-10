@@ -537,14 +537,15 @@ let vSel=new Set();
 
 function filteredVouchers(){
   const q=vf.q.toLowerCase();
+  const paidIn=paidInRange(vf.from||'0000-00-00',vf.to||'9999-12-31');
   return db.vouchers.filter(v=>{
     if(vf.type!=='All'&&v.type!==vf.type)return false;
     if(vf.status.length&&!vf.status.includes(v.status||'paid'))return false;
     if(vf.by!=='All'&&v.createdBy!==vf.by)return false;
     if(vf.heads.length&&!vf.heads.includes(v.headId))return false;
     if(vf.sub!=='All'&&v.subHeadId!==vf.sub)return false;
-    if(vf.from&&v.date<vf.from)return false;
-    if(vf.to&&v.date>vf.to)return false;
+    const dated=(!vf.from||v.date>=vf.from)&&(!vf.to||v.date<=vf.to);
+    if(!dated&&!paidIn.has(v.id))return false;
     if(q){
       const h=db.heads.find(x=>x.id===v.headId);
       const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);
