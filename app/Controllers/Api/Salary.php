@@ -8,7 +8,6 @@ use App\Models\HeadModel;
 use App\Models\SalarySlipModel;
 use App\Models\SubHeadModel;
 use App\Models\VoucherModel;
-use App\Models\VoucherPaymentModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class Salary extends BaseApiController
@@ -61,7 +60,6 @@ class Salary extends BaseApiController
                     'head_id'     => $ph[0],
                     'sub_head_id' => $ph[1],
                     'amount'      => $row['total'],
-                    'total'       => $row['total'],
                     'paid'        => $row['total'],
                     'party'       => $row['employee_name'],
                     'description' => 'Salary ' . date('F', mktime(0, 0, 0, $row['sal_month'], 1)) . ' ' . $row['sal_year'],
@@ -225,23 +223,12 @@ class Salary extends BaseApiController
             'head_id'     => $headId,
             'sub_head_id' => $subHeadId,
             'amount'      => $total,
-            'total'       => $total,
             'paid'        => $total,
-            'status'      => 'paid',
             'party'       => $slip['employee_name'],
             'description' => 'Salary ' . $monthName . ' ' . $slip['sal_year'],
             'attachment'  => '',
             'created_by'  => $this->user()['name'] ?? 'Admin',
             'created_at'  => $this->now(),
-        ]);
-        (new VoucherPaymentModel())->insert([
-            'id'         => $this->newId(),
-            'voucher_id' => $id,
-            'amount'     => $total,
-            'pay_date'   => $date,
-            'note'       => 'Salary payment',
-            'created_by' => $this->user()['name'] ?? 'Admin',
-            'created_at' => $this->now(),
         ]);
         return $id;
     }

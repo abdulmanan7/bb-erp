@@ -5,6 +5,7 @@ namespace App\Controllers\Api;
 use App\Models\EmployeeModel;
 use App\Models\HeadModel;
 use App\Models\InvoiceModel;
+use App\Models\PaymentModel;
 use App\Models\ProjectAssignmentModel;
 use App\Models\ProjectModel;
 use App\Models\SalarySlipModel;
@@ -12,7 +13,6 @@ use App\Models\SettingModel;
 use App\Models\SpendingModel;
 use App\Models\SubHeadModel;
 use App\Models\VoucherModel;
-use App\Models\VoucherPaymentModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class State extends BaseApiController
@@ -35,7 +35,7 @@ class State extends BaseApiController
                 'heads'     => $heads->allMapped(),
                 'subHeads'  => (new SubHeadModel())->allMapped(),
                 'vouchers'  => $vouchers->allMapped(),
-                'voucherPayments' => (new VoucherPaymentModel())->allMapped(),
+                'payments'  => (new PaymentModel())->allMapped(),
                 'spendings' => (new SpendingModel())->mappedFor(),
                 'projects'  => (new ProjectModel())->allMapped(),
                 'employees' => $employees->allMapped(),
@@ -61,16 +61,9 @@ class State extends BaseApiController
                 $vouchers->allMapped(),
                 fn ($v) => $v['createdBy'] === $user['name']
             )),
-            'voucherPayments' => array_values(array_filter(
-                (new VoucherPaymentModel())->allMapped(),
-                fn ($p) => in_array(
-                    $p['voucherId'],
-                    array_column(array_filter(
-                        $vouchers->allMapped(),
-                        fn ($v) => $v['createdBy'] === $user['name']
-                    ), 'id'),
-                    true
-                )
+            'payments'  => array_values(array_filter(
+                (new PaymentModel())->allMapped(),
+                fn ($p) => in_array($p['headId'], $assigned, true)
             )),
             'spendings' => (new SpendingModel())->mappedFor($user['id'] ?? ''),
             'projects'  => $emp ? array_map([ProjectModel::class, 'map'], (new ProjectAssignmentModel())->activeProjectsFor($emp['id'])) : [],

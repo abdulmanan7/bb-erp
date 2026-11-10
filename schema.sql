@@ -44,15 +44,18 @@ CREATE TABLE IF NOT EXISTS `heads` (
   `created_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS `voucher_payments` (
+CREATE TABLE IF NOT EXISTS `payments` (
   `id` varchar(32) NOT NULL PRIMARY KEY,
-  `voucher_id` varchar(32) NOT NULL,
-  `amount` decimal(14,2) NOT NULL DEFAULT 0,
-  `pay_date` date NOT NULL,
-  `note` varchar(255) NOT NULL DEFAULT '',
+  `type` enum('Payment','Receipt') NOT NULL,
+  `p_date` date NOT NULL,
+  `head_id` varchar(32) NOT NULL DEFAULT '',
+  `sub_head_id` varchar(32) NOT NULL DEFAULT '',
+  `total` decimal(14,2) NOT NULL DEFAULT 0,
+  `description` text,
   `created_by` varchar(100) NOT NULL DEFAULT '',
   `created_at` datetime DEFAULT NULL,
-  KEY `idx_voucher` (`voucher_id`)
+  KEY `idx_pdate` (`p_date`),
+  KEY `idx_head` (`head_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `sub_heads` (
@@ -89,17 +92,17 @@ CREATE TABLE IF NOT EXISTS `vouchers` (
   `v_date` date NOT NULL,
   `head_id` varchar(32) NOT NULL DEFAULT '',
   `sub_head_id` varchar(32) NOT NULL DEFAULT '',
+  `payment_id` varchar(32) NOT NULL DEFAULT '',
   `amount` decimal(14,2) NOT NULL DEFAULT 0,
-  `total` decimal(14,2) NOT NULL DEFAULT 0,
   `paid` decimal(14,2) NOT NULL DEFAULT 0,
-  `status` enum('pending','partial','paid') NOT NULL DEFAULT 'paid',
   `party` varchar(150) NOT NULL DEFAULT '',
   `description` text,
   `attachment` varchar(255) NOT NULL DEFAULT '',
   `created_by` varchar(100) NOT NULL DEFAULT '',
   `created_at` datetime DEFAULT NULL,
   KEY `idx_vdate` (`v_date`),
-  KEY `idx_head` (`head_id`)
+  KEY `idx_head` (`head_id`),
+  KEY `idx_payment` (`payment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `invoices` (

@@ -3,11 +3,9 @@
 namespace App\Controllers\Api;
 
 use App\Libraries\Attachments;
-use App\Models\EmployeeModel;
-use App\Models\HeadModel;
-use App\Models\SubHeadModel;
+use App\Libraries\HeadAccess;
+use App\Models\PaymentModel;
 use App\Models\VoucherModel;
-use App\Models\VoucherPaymentModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 class Vouchers extends BaseApiController
@@ -17,28 +15,22 @@ class Vouchers extends BaseApiController
         $b = $this->body();
         $user = $this->user();
 
-        $heads = new HeadModel();
-        $head = $heads->find((string) ($b['headId'] ?? ''));
-        if (! $head) {
-            return $this->fail('Select a valid account head.');
+        $payment = null;
+        if (! empty($b['paymentId'])) {
+            $payment = (new PaymentModel())->findMapped((string) $b['paymentId']);
+            if (! $payment) {
+                return $this->fail('Payment not found.', 404);
+            }
         }
-        if ($user['role'] !== 'admin'
-            && ! in_array($head['id'], (new EmployeeModel())->assignedHeadIds($user['id'] ?? ''), true)) {
-            return $this->fail('This head is not assigned to you.', 403);
+        $src = $payment ?? $b;
+        $head = HeadAccess::resolve($user, (string) ($src['headId'] ?? ''), (string) ($src['subHeadId'] ?? ''));
+        if (is_string($head)) {
+            return $this->fail($head);
         }
-
-        $subHeadId = (string) ($b['subHeadId'] ?? '');
-        if ($subHeadId !== '' && ! (new SubHeadModel())->where('id', $subHeadId)->where('head_id', $head['id'])->first()) {
-            return $this->fail('Invalid sub-head.');
+        $amount = (float) ($b['amount'] ?? 0);
+        if ($error = $this->amountError($amount, $payment)) {
+            return $this->fail($error);
         }
-
-        $amounts = $this->amounts($b);
-        if (is_string($amounts)) {
-            return $this->fail($amounts);
-        }
-
-        $date = $this->validDate($b['date'] ?? '');
-        $type = $head['type'] === 'Expense' ? 'Payment' : 'Receipt';
 
         $m = new VoucherModel();
         $id = $this->newId();
@@ -47,26 +39,23 @@ class Vouchers extends BaseApiController
             return $this->fail($file);
         }
 
+        $date = $this->validDate($b['date'] ?? '');
         $m->insert([
             'id'          => $id,
-            'no'          => $m->nextNo($type, $date),
-            'type'        => $type,
+            'no'          => $m->nextNo($head['type'], $date),
+            'type'        => $head['type'],
             'v_date'      => $date,
             'head_id'     => $head['id'],
-            'sub_head_id' => $subHeadId,
-            'amount'      => $amounts['paid'],
-            'total'       => $amounts['total'],
-            'paid'        => $amounts['paid'],
-            'status'      => $amounts['status'],
+            'sub_head_id' => $head['subHeadId'],
+            'amount'      => $amount,
+            'paid'        => $amount,
+            'payment_id'  => $payment['id'] ?? '',
             'party'       => trim((string) ($b['party'] ?? '')),
             'description' => trim((string) ($b['description'] ?? '')),
             'attachment'  => $file === true ? (string) ($b['attachment']['name'] ?? '') : '',
             'created_by'  => $user['name'],
             'created_at'  => $this->now(),
         ]);
-        if ($amounts['paid'] > 0) {
-            $this->recordPayment($id, $amounts['paid'], $date, 'Initial payment', $user['name']);
-        }
         return $this->json(['voucher' => VoucherModel::map($m->find($id))]);
     }
 
@@ -79,22 +68,16 @@ class Vouchers extends BaseApiController
         }
         $b = $this->body();
 
-        $head = (new HeadModel())->find((string) ($b['headId'] ?? ''));
-        if (! $head) {
-            return $this->fail('Select a valid account head.');
+        $payment = $existing['payment_id'] !== '' ? (new PaymentModel())->findMapped($existing['payment_id']) : null;
+        $src = $payment ?? $b;
+        $head = HeadAccess::resolve($this->user(), (string) ($src['headId'] ?? ''), (string) ($src['subHeadId'] ?? ''));
+        if (is_string($head)) {
+            return $this->fail($head);
         }
-        $subHeadId = (string) ($b['subHeadId'] ?? '');
-        if ($subHeadId !== '' && ! (new SubHeadModel())->where('id', $subHeadId)->where('head_id', $head['id'])->first()) {
-            return $this->fail('Invalid sub-head.');
+        $amount = (float) ($b['amount'] ?? $existing['amount']);
+        if ($error = $this->amountError($amount, $payment, (float) $existing['amount'])) {
+            return $this->fail($error);
         }
-
-        // Paid is owned by the payment ledger — only total is editable here.
-        $total = (float) ($b['total'] ?? $existing['total']);
-        if ($total <= 0) {
-            return $this->fail('Total must be greater than zero.');
-        }
-        $paid = (float) $existing['paid'];
-        $status = $paid <= 0 ? 'pending' : ($paid >= $total ? 'paid' : 'partial');
 
         $attachment = $existing['attachment'];
         if (! empty($b['removeAttachment'])) {
@@ -110,14 +93,12 @@ class Vouchers extends BaseApiController
         }
 
         $m->update($id, [
-            'type'        => $head['type'] === 'Expense' ? 'Payment' : 'Receipt',
+            'type'        => $head['type'],
             'v_date'      => $this->validDate($b['date'] ?? ''),
             'head_id'     => $head['id'],
-            'sub_head_id' => $subHeadId,
-            'amount'      => $paid,
-            'total'       => $total,
-            'paid'        => $paid,
-            'status'      => $status,
+            'sub_head_id' => $head['subHeadId'],
+            'amount'      => $amount,
+            'paid'        => $amount,
             'party'       => trim((string) ($b['party'] ?? '')),
             'description' => trim((string) ($b['description'] ?? '')),
             'attachment'  => $attachment,
@@ -153,119 +134,22 @@ class Vouchers extends BaseApiController
         if ($ids === []) {
             return;
         }
-        $db = db_connect();
-        $db->transStart();
         (new VoucherModel())->whereIn('id', $ids)->delete();
-        (new VoucherPaymentModel())->whereIn('voucher_id', $ids)->delete();
-        $db->transComplete();
         foreach ($ids as $id) {
             Attachments::delete('vouchers', $id);
         }
     }
 
-    /**
-     * Records an installment against a voucher. Staff may only pay
-     * vouchers they created themselves.
-     */
-    public function addPayment($id = null): ResponseInterface
+    /** Error message when the amount is not positive or would exceed the payment's balance. */
+    private function amountError(float $amount, ?array $payment, float $current = 0): ?string
     {
-        $m = new VoucherModel();
-        $v = $m->find($id);
-        if (! $v) {
-            return $this->fail('Voucher not found.', 404);
-        }
-        $user = $this->user();
-        if ($user['role'] !== 'admin' && $v['created_by'] !== $user['name']) {
-            return $this->fail('Access denied.', 403);
-        }
-
-        $b = $this->body();
-        $amount = (float) ($b['amount'] ?? 0);
         if ($amount <= 0) {
-            return $this->fail('Enter a payment amount greater than zero.');
+            return 'Enter an amount greater than zero.';
         }
-        $remaining = (float) $v['total'] - (float) $v['paid'];
-        if ($amount > $remaining + 0.001) {
-            return $this->fail('Payment exceeds the remaining balance.');
+        if ($payment && $amount > $payment['total'] - $payment['paid'] + $current + 0.001) {
+            return 'Amount exceeds the remaining balance of this payment.';
         }
-        $date = $this->validDate($b['date'] ?? date('Y-m-d'));
-        $this->recordPayment($id, $amount, $date, trim((string) ($b['note'] ?? '')), $user['name']);
-        $this->syncPaid($id);
-        return $this->json(['voucher' => VoucherModel::map($m->find($id))]);
-    }
-
-    public function deletePayment($paymentId = null): ResponseInterface
-    {
-        $pm = new VoucherPaymentModel();
-        $p = $pm->find($paymentId);
-        if (! $p) {
-            return $this->fail('Payment not found.', 404);
-        }
-        $pm->delete($paymentId);
-        $this->syncPaid($p['voucher_id']);
-        return $this->json(['ok' => true]);
-    }
-
-    private function recordPayment(string $voucherId, float $amount, string $date, string $note, string $by): void
-    {
-        (new VoucherPaymentModel())->insert([
-            'id'         => $this->newId(),
-            'voucher_id' => $voucherId,
-            'amount'     => $amount,
-            'pay_date'   => $date,
-            'note'       => $note,
-            'created_by' => $by,
-            'created_at' => $this->now(),
-        ]);
-    }
-
-    /** Recomputes paid/amount/status on the voucher from its ledger. */
-    private function syncPaid(string $voucherId): void
-    {
-        $m = new VoucherModel();
-        $v = $m->find($voucherId);
-        if (! $v) {
-            return;
-        }
-        $pm = new VoucherPaymentModel();
-        $paid = $pm->paidFor($voucherId);
-        // Defensive: a voucher with paid>0 but an empty ledger (created before
-        // tracking) gets a synthetic backfill entry so history stays complete.
-        if ($paid <= 0 && (float) $v['paid'] > 0) {
-            $this->recordPayment($voucherId, (float) $v['paid'], $v['v_date'], 'Recorded before payment tracking', $v['created_by']);
-            $paid = $pm->paidFor($voucherId);
-        }
-        $total = (float) $v['total'];
-        $m->update($voucherId, [
-            'amount' => $paid,
-            'paid'   => $paid,
-            'status' => $paid <= 0 ? 'pending' : ($paid >= $total ? 'paid' : 'partial'),
-        ]);
-    }
-
-    /**
-     * Total = the voucher's full amount; paid = amount actually settled.
-     * amount stays equal to paid so cash-flow reports keep working.
-     * Returns ['total','paid','status'] or an error string.
-     */
-    private function amounts(array $b)
-    {
-        $total = (float) ($b['total'] ?? $b['amount'] ?? 0);
-        $paid = isset($b['paid']) ? (float) $b['paid'] : $total;
-        if ($total <= 0) {
-            return 'Total must be greater than zero.';
-        }
-        if ($paid < 0) {
-            return 'Paid amount cannot be negative.';
-        }
-        if ($paid > $total) {
-            return 'Paid amount cannot exceed the total.';
-        }
-        return [
-            'total'  => $total,
-            'paid'   => $paid,
-            'status' => $paid <= 0 ? 'pending' : ($paid >= $total ? 'paid' : 'partial'),
-        ];
+        return null;
     }
 
     /**

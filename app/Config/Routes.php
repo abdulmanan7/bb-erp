@@ -24,11 +24,14 @@ $routes->group('api', static function (RouteCollection $routes) {
     $routes->put('employees/(:segment)', 'Api\Employees::update/$1', ['filter' => 'auth:admin']);
     $routes->delete('employees/(:segment)', 'Api\Employees::delete/$1', ['filter' => 'auth:admin']);
 
+    // Payments — employees record for assigned heads, admin edits and deletes
+    $routes->post('payments', 'Api\Payments::create', ['filter' => 'auth']);
+    $routes->put('payments/(:segment)', 'Api\Payments::update/$1', ['filter' => 'auth:admin']);
+    $routes->delete('payments/(:segment)', 'Api\Payments::delete/$1', ['filter' => 'auth:admin']);
+
     // Vouchers — employees can create, admin manages all
     $routes->get('vouchers/(:segment)/attachment', 'Api\Vouchers::attachment/$1', ['filter' => 'auth']);
     $routes->post('vouchers', 'Api\Vouchers::create', ['filter' => 'auth']);
-    $routes->post('vouchers/(:segment)/payments', 'Api\Vouchers::addPayment/$1', ['filter' => 'auth']);
-    $routes->delete('vouchers/payments/(:segment)', 'Api\Vouchers::deletePayment/$1', ['filter' => 'auth:admin']);
     $routes->post('vouchers/bulk-delete', 'Api\Vouchers::bulkDelete', ['filter' => 'auth:admin']);
     $routes->put('vouchers/(:segment)', 'Api\Vouchers::update/$1', ['filter' => 'auth:admin']);
     $routes->delete('vouchers/(:segment)', 'Api\Vouchers::delete/$1', ['filter' => 'auth:admin']);

@@ -33,7 +33,7 @@ function defaultSettings(){
     primary:'#0b2e4f',secondary:'#e0952e',adminUser:'BBAccounts',currency:'Rs',taxRate:0,
     invoiceFooter:'Thank you for your business!'};
 }
-let db={settings:defaultSettings(),employees:[],heads:[],vouchers:[],spendings:[],projects:[],invoices:[],salary:[]};
+let db={settings:defaultSettings(),employees:[],heads:[],vouchers:[],payments:[],spendings:[],projects:[],invoices:[],salary:[]};
 
 /* ── SESSION ── */
 let session=null;
@@ -130,6 +130,7 @@ function shell(content){
   const navAdmin=[
     {r:'dashboard',icon:'<i class="fa-solid fa-gauge-high"></i>',label:'Dashboard',sec:'MAIN'},
     {r:'heads',icon:'<i class="fa-solid fa-folder-tree"></i>',label:'Account Heads',sec:'ACCOUNTING'},
+    {r:'payments',icon:'<i class="fa-solid fa-file-signature"></i>',label:'Payments'},
     {r:'vouchers',icon:'<i class="fa-solid fa-receipt"></i>',label:'Vouchers'},
     {r:'spending',icon:'<i class="fa-solid fa-wallet"></i>',label:'Spending'},
     {r:'invoices',icon:'<i class="fa-solid fa-file-invoice"></i>',label:'Invoices'},
@@ -143,7 +144,7 @@ function shell(content){
     {r:'announcements',icon:'<i class="fa-solid fa-bullhorn"></i>',label:'Announcements',sec:'COMMUNICATION'},
     {r:'settings',icon:'<i class="fa-solid fa-gear"></i>',label:'Settings',sec:'SYSTEM'},
   ];
-  const navEmp=[{r:'add',icon:'<i class="fa-solid fa-circle-plus"></i>',label:'Add Entry',sec:'ENTRIES'},{r:'mine',icon:'<i class="fa-solid fa-clipboard-list"></i>',label:'My Entries'},{r:'spending',icon:'<i class="fa-solid fa-wallet"></i>',label:'Spending'}];
+  const navEmp=[{r:'add',icon:'<i class="fa-solid fa-circle-plus"></i>',label:'Add Entry',sec:'ENTRIES'},{r:'payments',icon:'<i class="fa-solid fa-file-signature"></i>',label:'Payments'},{r:'mine',icon:'<i class="fa-solid fa-clipboard-list"></i>',label:'My Entries'},{r:'spending',icon:'<i class="fa-solid fa-wallet"></i>',label:'Spending'}];
   const nav=session.role==='admin'?navAdmin:navEmp;
   let lastSec='';
   const navHtml=nav.map(item=>{
@@ -165,7 +166,7 @@ function shell(content){
   </div>`;
 }
 
-const ROUTES={admin:['dashboard','heads','employees','vouchers','spending','invoices','salary','reports','settings','projects','attendance','attreport','leaves','announcements'],staff:['add','mine','spending']};
+const ROUTES={admin:['dashboard','heads','employees','payments','vouchers','spending','invoices','salary','reports','settings','projects','attendance','attreport','leaves','announcements'],staff:['add','payments','mine','spending']};
 function defaultPage(role){return role==='admin'?'dashboard':'add';}
 function routeFromUrl(){
   const seg=location.pathname.split('/').filter(Boolean).pop();
@@ -200,17 +201,6 @@ function dashRange(){
     to:dashTo||now.toISOString().slice(0,10),
   };
 }
-function paidInRange(from,to){
-  const paid=new Map();
-  (db.voucherPayments||[]).forEach(p=>{if(p.date>=from&&p.date<=to)paid.set(p.voucherId,(paid.get(p.voucherId)||0)+p.amount);});
-  return paid;
-}
-/* Vouchers with `amount` set to the cash actually paid within [from,to] (by payment date). */
-function vouchersInPeriod(from,to,includeDated=false){
-  const paid=paidInRange(from,to);
-  return db.vouchers.filter(v=>paid.has(v.id)||(includeDated&&v.date>=from&&v.date<=to))
-    .map(v=>({...v,amount:paid.get(v.id)||0}));
-}
 function applyDashRange(){
   dashFrom=document.getElementById('dashFrom').value;
   dashTo=document.getElementById('dashTo').value;
@@ -220,7 +210,7 @@ function applyDashRange(){
 function renderDashboard(){
   const now=new Date();
   const {from,to}=dashRange();
-  const tm=vouchersInPeriod(from,to);
+  const tm=db.vouchers.filter(v=>v.date>=from&&v.date<=to);
   const inc=tm.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const aInc=db.vouchers.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
@@ -291,12 +281,12 @@ function renderDashboard(){
 
 function viewHeadVouchers(headId){
   const {from,to}=dashRange();
-  vf={q:'',type:'All',heads:[headId],sub:'All',status:[],by:'All',from,to,page:1,perPage:vf.perPage};
+  vf={q:'',type:'All',heads:[headId],sub:'All',by:'All',from,to,page:1,perPage:vf.perPage};
   navigate('vouchers');
 }
 function viewTypeVouchers(type,from,to){
   const r=dashRange();
-  vf={q:'',type:type==='All'?'All':type,heads:[],sub:'All',status:[],by:'All',from:from===undefined?r.from:from,to:to===undefined?r.to:to,page:1,perPage:vf.perPage};
+  vf={q:'',type:type==='All'?'All':type,heads:[],sub:'All',by:'All',from:from===undefined?r.from:from,to:to===undefined?r.to:to,page:1,perPage:vf.perPage};
   navigate('vouchers');
 }
 
@@ -306,7 +296,7 @@ function drawDashChart(){
   if(!cv||typeof Chart==='undefined')return;
   if(dashChart){dashChart.destroy();dashChart=null;}
   const {from,to}=dashRange();
-  const tm=vouchersInPeriod(from,to);
+  const tm=db.vouchers.filter(v=>v.date>=from&&v.date<=to);
   const inc=tm.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   dashChart=new Chart(cv,{type:'doughnut',
@@ -316,7 +306,7 @@ function drawDashChart(){
 
 function exportDashPdf(){
   const {from,to}=dashRange();
-  const tm=vouchersInPeriod(from,to);
+  const tm=db.vouchers.filter(v=>v.date>=from&&v.date<=to);
   const inc=tm.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const exp=tm.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const hAgg={};
@@ -531,21 +521,19 @@ async function deleteEmployee(id){
 /* ═══════════════════════════════════════════════════
    VOUCHERS
 ═══════════════════════════════════════════════════ */
-let vf={q:'',type:'All',heads:[],sub:'All',status:[],by:'All',from:'',to:'',page:1,perPage:20};
+let vf={q:'',type:'All',heads:[],sub:'All',by:'All',from:'',to:'',page:1,perPage:20};
 
 let vSel=new Set();
 
 function filteredVouchers(){
   const q=vf.q.toLowerCase();
-  const paidIn=paidInRange(vf.from||'0000-00-00',vf.to||'9999-12-31');
   return db.vouchers.filter(v=>{
     if(vf.type!=='All'&&v.type!==vf.type)return false;
-    if(vf.status.length&&!vf.status.includes(v.status||'paid'))return false;
     if(vf.by!=='All'&&v.createdBy!==vf.by)return false;
     if(vf.heads.length&&!vf.heads.includes(v.headId))return false;
     if(vf.sub!=='All'&&v.subHeadId!==vf.sub)return false;
-    const dated=(!vf.from||v.date>=vf.from)&&(!vf.to||v.date<=vf.to);
-    if(!dated&&!paidIn.has(v.id))return false;
+    if(vf.from&&v.date<vf.from)return false;
+    if(vf.to&&v.date>vf.to)return false;
     if(q){
       const h=db.heads.find(x=>x.id===v.headId);
       const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);
@@ -561,11 +549,6 @@ function headLabel(v){
   return h.name+(sub?` <span style="color:#8896a6;font-size:11.5px">→ ${sub.name}</span>`:'');
 }
 
-function vStatusBadge(v){
-  return v.status==='pending'?'<span class="badge badge-warn">Pending</span>'
-    :v.status==='partial'?'<span class="badge badge-neutral">Partial</span>'
-    :'<span class="badge badge-income">Paid</span>';
-}
 function selectedVouchers(){return db.vouchers.filter(v=>vSel.has(v.id));}
 function vSelToggle(id,on){on?vSel.add(id):vSel.delete(id);renderVouchTable();}
 function vSelPageToggle(on){vouchPageSlice(filteredVouchers()).slice.forEach(v=>on?vSel.add(v.id):vSel.delete(v.id));renderVouchTable();}
@@ -588,24 +571,22 @@ function vSelBarHtml(){
 
 function voucherRowHtml(v){
   return `<tr><td><input type="checkbox" ${vSel.has(v.id)?'checked':''} onchange="vSelToggle('${v.id}',this.checked)"></td>${vouchCols().map(c=>c.td(v)).join('')}
-  <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="viewVoucher('${v.id}')" title="View"><i class="fa-solid fa-eye"></i></button> <button class="link-btn" onclick="payVoucherModal('${v.id}')" title="Payments"><i class="fa-solid fa-coins"></i></button> <button class="link-btn" onclick="openVoucherPrint('${v.id}')" title="Print view"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="downloadVoucherPdf('${v.id}')" title="Download PDF"><i class="fa-solid fa-file-arrow-down"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+  <td style="white-space:nowrap">${v.attachment?`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank" title="${v.attachment}"><i class="fa-solid fa-paperclip"></i></a> `:''}<button class="link-btn" onclick="viewVoucher('${v.id}')" title="View"><i class="fa-solid fa-eye"></i></button> <button class="link-btn" onclick="openVoucherPrint('${v.id}')" title="Print view"><i class="fa-solid fa-print"></i></button> <button class="link-btn" onclick="downloadVoucherPdf('${v.id}')" title="Download PDF"><i class="fa-solid fa-file-arrow-down"></i></button> <button class="link-btn" onclick="voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deleteVoucher('${v.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`;
 }
 
-function vouchStatsHtml(rows){
-  const by=(t,st)=>rows.filter(v=>(t==='*'||v.type===t)&&(!st||v.status===st));
-  const sum=(rs,f)=>rs.reduce((s,v)=>s+v[f],0);
-  const receipts=by('Receipt'),payments=by('Payment');
-  const pending=by('*','pending'),partial=by('*','partial'),paid=by('*','paid');
-  const card=(cls,label,val,note)=>`<div class="s-card ${cls}" style="padding:13px 16px">
+function statCard(cls,label,val,note){
+  return `<div class="s-card ${cls}" style="padding:13px 16px">
     <div class="label">${label}</div>
     <div class="value" style="font-size:17px;margin-top:4px">${val}</div>
     <div style="font-size:11px;color:#8896a6;margin-top:3px">${note}</div></div>`;
+}
+
+function vouchStatsHtml(rows){
+  const receipts=rows.filter(v=>v.type==='Receipt'),payments=rows.filter(v=>v.type==='Payment');
+  const total=vs=>money(vs.reduce((s,v)=>s+v.amount,0));
   return `<div class="summary-cards" style="gap:10px;margin-bottom:14px">
-    ${card('income','Cash In',money(sum(receipts,'amount')),`${receipts.length} receipt${receipts.length===1?'':'s'}`)}
-    ${card('expense','Cash Out',money(sum(payments,'amount')),`${payments.length} payment${payments.length===1?'':'s'}`)}
-    ${card('net','Pending',pending.length,`${money(sum(pending,'total'))} unpaid`)}
-    ${card('neutral','Partial',partial.length,`${money(partial.reduce((s,v)=>s+(v.total-v.paid),0))} remaining`)}
-    ${card('income','Paid',paid.length,`${money(sum(paid,'paid'))} settled`)}
+    ${statCard('income','Cash In',total(receipts),`${receipts.length} receipt${receipts.length===1?'':'s'}`)}
+    ${statCard('expense','Cash Out',total(payments),`${payments.length} payment${payments.length===1?'':'s'}`)}
   </div>`;
 }
 
@@ -620,11 +601,10 @@ function vouchFootHtml(rows){
   const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
   const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
   const net=inc-exp;
-  const billed=rows.reduce((s,v)=>s+v.total,0),due=rows.reduce((s,v)=>s+(v.total-v.paid),0);
   const cells=vouchCols().map((c,i)=>{
-    if(i===0)return `<td style="font-weight:800;padding:12px 14px">TOTAL<div style="font-size:10.5px;font-weight:500;color:#8896a6">Billed ${money(billed)} • Paid ${money(inc+exp)}</div></td>`;
+    if(i===0)return `<td style="font-weight:800;padding:12px 14px">TOTAL</td>`;
     if(!c.num)return '<td></td>';
-    return `<td style="font-weight:800;padding:12px 14px;white-space:nowrap;text-align:right;color:${c.key==='in'?'#1e8449':c.key==='out'?'#c0392b':c.key==='due'?'#b8860b':'inherit'}">${money(rows.reduce((s,v)=>s+c.sum(v),0))}</td>`;
+    return `<td style="font-weight:800;padding:12px 14px;white-space:nowrap;text-align:right;color:${c.key==='in'?'#1e8449':c.key==='out'?'#c0392b':'inherit'}">${money(rows.reduce((s,v)=>s+c.sum(v),0))}</td>`;
   }).join('');
   return `<tr style="background:#f7f9fc"><td></td>${cells}<td style="font-weight:800;padding:12px 14px;white-space:nowrap;color:${net<0?'#c0392b':'#1e8449'}" title="Balance (In − Out)">Balance ${money(net)}</td></tr>`;
 }
@@ -650,21 +630,6 @@ function vfHeadSync(){
   vf.heads=checked.length===all?[]:checked;
   document.getElementById('vfHeadAll').checked=checked.length===all;
   document.getElementById('vfHeadLabel').textContent=vfHeadsLabel();
-  applyVoucherFilters();
-}
-
-const VOUCHER_STATUSES=[['pending','Pending'],['partial','Partial'],['paid','Paid']];
-function vfStatusToggle(){document.getElementById('vfStatusPanel').classList.toggle('hidden');}
-function vfStatusToggleAll(cb){document.querySelectorAll('.vfStatusChk').forEach(c=>c.checked=cb.checked);vfStatusSync();}
-function vfStatusLabel(){
-  if(!vf.status.length)return 'All Statuses';
-  return vf.status.map(s=>VOUCHER_STATUSES.find(([k])=>k===s)[1]).join(', ');
-}
-function vfStatusSync(){
-  const checked=[...document.querySelectorAll('.vfStatusChk:checked')].map(c=>c.value);
-  vf.status=checked.length===VOUCHER_STATUSES.length?[]:checked;
-  document.getElementById('vfStatusAll').checked=checked.length===VOUCHER_STATUSES.length;
-  document.getElementById('vfStatusLabel').textContent=vfStatusLabel();
   applyVoucherFilters();
 }
 
@@ -705,7 +670,7 @@ function vfSetPer(v){vf.perPage=v==='all'?'all':parseInt(v);vf.page=1;renderVouc
 function applyVoucherFilters(){
   const subSel=document.getElementById('vfSub');
   vf={q:document.getElementById('vfQ').value.trim(),type:document.getElementById('vfType').value,
-      heads:vf.heads,sub:subSel.value||'All',status:vf.status,by:document.getElementById('vfBy').value,
+      heads:vf.heads,sub:subSel.value||'All',by:document.getElementById('vfBy').value,
       from:document.getElementById('vfFrom').value,to:document.getElementById('vfTo').value,
       page:1,perPage:vf.perPage};
   subSel.innerHTML=vfSubOptions();
@@ -715,7 +680,7 @@ function applyVoucherFilters(){
 }
 
 function clearVoucherFilters(){
-  vf={q:'',type:'All',heads:[],sub:'All',status:[],by:'All',from:'',to:'',page:1,perPage:20};
+  vf={q:'',type:'All',heads:[],sub:'All',by:'All',from:'',to:'',page:1,perPage:20};
   render();
 }
 
@@ -750,15 +715,6 @@ function renderVouchersPage(){
             </div>
           </div>
         </div>
-        <div style="min-width:150px"><label>Status</label>
-          <div class="ms-wrap">
-            <button type="button" class="ms-btn" onclick="vfStatusToggle()"><span id="vfStatusLabel">${vfStatusLabel()}</span><i class="fa-solid fa-chevron-down"></i></button>
-            <div class="ms-panel hidden" id="vfStatusPanel">
-              <label class="chk"><input type="checkbox" id="vfStatusAll" ${!vf.status.length?'checked':''} onchange="vfStatusToggleAll(this)">All Statuses</label>
-              ${VOUCHER_STATUSES.map(([k,label])=>`<label class="chk"><input type="checkbox" class="vfStatusChk" value="${k}" ${vf.status.includes(k)?'checked':''} onchange="vfStatusSync()">${label}</label>`).join('')}
-            </div>
-          </div>
-        </div>
         <div style="min-width:130px"><label>From</label><input type="date" id="vfFrom" value="${vf.from}" onchange="applyVoucherFilters()"></div>
         <div style="min-width:130px"><label>To</label><input type="date" id="vfTo" value="${vf.to}" onchange="applyVoucherFilters()"></div>
         <div style="flex:0;min-width:auto;display:flex;gap:8px"><button class="btn-secondary" onclick="exportVoucherPdf()"><i class="fa-solid fa-file-pdf"></i> PDF</button><button class="btn-secondary" onclick="exportVoucherCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button><button class="btn-secondary" onclick="clearVoucherFilters()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
@@ -777,6 +733,169 @@ function renderVouchersPage(){
       <tfoot id="vouchFoot">${vouchFootHtml(rows)}</tfoot>
     </table></div>
     <div class="pager" id="vouchPager">${vouchPagerHtml(rows.length,pages)}</div>`);
+}
+
+/* ═══════════════════════════════════════════════════
+   PAYMENTS — agreed amounts; vouchers settle them
+═══════════════════════════════════════════════════ */
+let pyf={q:'',status:'All',head:'All'};
+
+function paymentStatus(p){return p.paid<=0?'pending':p.paid>=p.total?'paid':'partial';}
+function paymentStatusBadge(p){
+  const s=paymentStatus(p);
+  return s==='pending'?'<span class="badge badge-warn">Pending</span>'
+    :s==='partial'?'<span class="badge badge-neutral">Partial</span>'
+    :'<span class="badge badge-income">Paid</span>';
+}
+function paymentLabel(id){
+  const p=db.payments.find(x=>x.id===id);
+  return p?`${esc(p.description)||'—'} • ${headLabel(p)}`:'—';
+}
+function paymentRows(){
+  const q=pyf.q.toLowerCase();
+  return db.payments.filter(p=>{
+    if(pyf.status!=='All'&&paymentStatus(p)!==pyf.status)return false;
+    if(pyf.head!=='All'&&p.headId!==pyf.head)return false;
+    if(q&&!`${p.description} ${(db.heads.find(h=>h.id===p.headId)||{}).name||''}`.toLowerCase().includes(q))return false;
+    return true;
+  }).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+}
+function paymentStatsHtml(rows){
+  const total=rows.reduce((s,p)=>s+p.total,0),paid=rows.reduce((s,p)=>s+p.paid,0);
+  return `<div class="summary-cards" style="gap:10px;margin-bottom:14px">
+    ${statCard('neutral','Agreed',money(total),`${rows.length} payment${rows.length===1?'':'s'}`)}
+    ${statCard('income','Settled',money(paid),'Paid through vouchers')}
+    ${statCard('expense','Balance',money(total-paid),'Still to settle')}
+  </div>`;
+}
+function paymentRowHtml(p){
+  const bal=Math.max(0,p.total-p.paid),admin=session.role==='admin';
+  return `<tr><td style="white-space:nowrap">${dateStr(p.date)}</td><td>${headLabel(p)}</td><td style="font-size:13px;color:#666">${esc(p.description)||'—'}</td>
+    <td style="text-align:right;white-space:nowrap">${money(p.total)}</td><td style="text-align:right;white-space:nowrap">${money(p.paid)}</td>
+    <td style="text-align:right;white-space:nowrap;font-weight:700;color:${bal>0?'#c0392b':'#1e8449'}">${money(bal)}</td><td>${paymentStatusBadge(p)}</td>
+    <td style="white-space:nowrap"><button class="link-btn" onclick="payPaymentModal('${p.id}')" title="Vouchers & pay"><i class="fa-solid fa-coins"></i></button> ${admin?`<button class="link-btn" onclick="paymentForm('${p.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button> <button class="link-btn danger" onclick="deletePayment('${p.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>`:''}</td></tr>`;
+}
+function pyRefresh(){
+  const rows=paymentRows();
+  document.getElementById('pyStats').innerHTML=paymentStatsHtml(rows);
+  document.getElementById('pyBody').innerHTML=rows.map(paymentRowHtml).join('')||'<tr class="empty-row"><td colspan="8">No payments match the filters.</td></tr>';
+}
+function pySync(){
+  pyf={q:document.getElementById('pyQ').value.trim(),status:document.getElementById('pyStatus').value,head:document.getElementById('pyHead').value};
+  pyRefresh();
+}
+function pyReset(){pyf={q:'',status:'All',head:'All'};render();}
+
+function renderPaymentsPage(){
+  const headOpts='<option value="All">All Heads</option>'+db.heads.map(h=>`<option value="${h.id}" ${pyf.head===h.id?'selected':''}>${esc(h.name)}</option>`).join('');
+  const statusOpts=[['All','All Statuses'],['pending','Pending'],['partial','Partial'],['paid','Paid']].map(([k,l])=>`<option value="${k}" ${pyf.status===k?'selected':''}>${l}</option>`).join('');
+  return shell(`
+    <div class="page-header"><h2><i class="fa-solid fa-file-signature"></i> Payments</h2><button class="btn-primary" onclick="paymentForm()"><i class="fa-solid fa-plus"></i> New Payment</button></div>
+    <div class="page-title-bar" style="padding:14px 18px">
+      <div class="row-inline" style="width:100%;align-items:flex-end">
+        <div style="flex:2.2;min-width:180px"><label>Search</label><input id="pyQ" placeholder="Description or head…" value="${esc(pyf.q)}" oninput="pySync()"></div>
+        <div style="min-width:170px"><label>Head</label><select id="pyHead" onchange="pySync()">${headOpts}</select></div>
+        <div style="min-width:150px"><label>Status</label><select id="pyStatus" onchange="pySync()">${statusOpts}</select></div>
+        <div style="flex:0;min-width:auto"><button class="btn-secondary" onclick="pyReset()"><i class="fa-solid fa-rotate-left"></i> Reset</button></div>
+      </div>
+    </div>
+    <div id="pyStats">${paymentStatsHtml(paymentRows())}</div>
+    <div style="overflow-x:auto"><table class="list-table">
+      <thead><tr><th>Date</th><th>Head</th><th>Description</th><th style="text-align:right">Total</th><th style="text-align:right">Paid</th><th style="text-align:right">Balance</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="pyBody">${paymentRows().map(paymentRowHtml).join('')||'<tr class="empty-row"><td colspan="8">No payments match the filters.</td></tr>'}</tbody>
+    </table></div>`);
+}
+
+function paymentForm(id){
+  const editing=id?db.payments.find(x=>x.id===id):null;
+  const allowedHeads=session.role==='admin'?db.heads:db.heads.filter(h=>(currentEmployee()?.assignedHeads||[]).includes(h.id));
+  if(!allowedHeads.length){toast('No account heads assigned. Contact admin.','warn');return;}
+  const locked=!!editing&&editing.paid>0;
+  const options=allowedHeads.map(h=>`<option value="${h.id}" ${editing?.headId===h.id?'selected':''}>${esc(h.name)} — ${h.type}</option>`).join('');
+  showModal(`<div class="modal-header"><h3><i class="fa-solid fa-file-signature"></i> ${id?'Edit':'New'} Payment</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
+    <form onsubmit="savePayment(event,'${id||''}')">
+      <label>Account Head *</label><select id="pyFormHead" required ${locked?'disabled':''} onchange="syncSubHeads('pyFormHead','pySubWrap','pySubHead')">${options}</select>
+      <div id="pySubWrap" style="display:none"><label>Sub-Head *</label><select id="pySubHead" ${locked?'disabled':''}></select></div>
+      <div class="row-inline">
+        <div><label>Date *</label><input type="date" id="pyFormDate" value="${editing?.date||new Date().toISOString().slice(0,10)}" required></div>
+        <div><label>Total (PKR) *</label><input type="number" id="pyFormTotal" min="1" value="${editing?.total||''}" placeholder="0" required ${locked?'disabled':''}></div>
+      </div>
+      <label>Description</label>
+      <textarea id="pyFormDesc" placeholder="What this payment is for">${esc(editing?.description||'')}</textarea>
+      ${locked?'<p style="font-size:12.5px;color:#8896a6;margin-top:8px">Head and total are locked because vouchers are already linked to this payment.</p>':''}
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+      </div>
+    </form>`);
+  syncSubHeads('pyFormHead','pySubWrap','pySubHead',editing?.subHeadId||'');
+}
+
+async function savePayment(e,id){
+  e.preventDefault();
+  const subHeadId=subHeadValue('pySubWrap','pySubHead');
+  if(subHeadId===null){toast('Select a sub-head.','warn');return;}
+  const total=Number(document.getElementById('pyFormTotal').value||0);
+  if(total<=0){toast('Total must be greater than zero.','warn');return;}
+  const data={headId:document.getElementById('pyFormHead').value,subHeadId,date:document.getElementById('pyFormDate').value,total,
+    description:document.getElementById('pyFormDesc').value.trim()};
+  if(!await api('payments'+(id?'/'+id:''),id?'PUT':'POST',data))return;
+  await loadState();closeModal();render();toast('Payment saved.');
+}
+
+async function deletePayment(id){
+  if(!confirm('Delete this payment?'))return;
+  if(!await api('payments/'+id,'DELETE'))return;
+  await loadState();render();toast('Payment deleted.','warn');
+}
+
+function payPaymentModal(id){
+  const p=db.payments.find(x=>x.id===id);if(!p)return;
+  const vouchers=db.vouchers.filter(v=>v.paymentId===id).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const bal=Math.max(0,p.total-p.paid),admin=session.role==='admin';
+  const chip=(l,val,color)=>`<div style="flex:1;text-align:center;padding:10px;background:#f5f8fb;border-radius:8px;border:1px solid var(--border)">
+    <div style="font-size:10.5px;font-weight:700;color:#8896a6;text-transform:uppercase;letter-spacing:.6px">${l}</div>
+    <div style="font-size:17px;font-weight:800;color:${color};margin-top:3px">${val}</div></div>`;
+  showModal(`<div class="modal-header"><h3><i class="fa-solid fa-coins"></i> Payment — ${esc(p.description)||'Payment'}</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
+    <p style="font-size:13px;color:#8896a6;margin-bottom:10px">${headLabel(p)} • ${dateStr(p.date)}</p>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      ${chip('Total',money(p.total),'var(--primary)')}
+      ${chip('Paid',money(p.paid),'var(--success)')}
+      ${chip('Balance',money(bal),bal>0?'var(--danger)':'var(--success)')}
+    </div>
+    <label style="margin-top:0">Vouchers</label>
+    ${vouchers.length?`<table class="doc-table" style="margin-top:4px">
+      <thead><tr><th>Date</th><th>No.</th><th>Amount</th><th>Party</th><th>By</th><th></th></tr></thead>
+      <tbody>${vouchers.map(v=>`<tr><td style="white-space:nowrap">${dateStr(v.date)}</td><td>${v.no}</td><td style="font-weight:700;white-space:nowrap">${money(v.amount)}</td><td style="font-size:13px;color:#666">${esc(v.party)||'—'}</td><td style="font-size:12px;color:#8896a6">${v.createdBy||'—'}</td>
+        <td>${admin?`<button class="link-btn danger" onclick="deletePaymentVoucher('${v.id}','${p.id}')" title="Delete voucher"><i class="fa-solid fa-trash"></i></button>`:''}</td></tr>`).join('')}
+      </tbody></table>`
+      :'<p style="font-size:13px;color:#8896a6;padding:10px 0">No vouchers yet.</p>'}
+    ${bal>0?`<form onsubmit="payPayment(event,'${p.id}')" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div class="row-inline">
+        <div><label>Amount *</label><input type="number" id="pyAmt" min="1" max="${bal}" value="${bal}" required></div>
+        <div><label>Date</label><input type="date" id="pyDate" value="${new Date().toISOString().slice(0,10)}"></div>
+      </div>
+      <label>Party</label><input id="pyParty" placeholder="Person or company name">
+      <label>Note</label><input id="pyNote" placeholder="e.g. Cash installment, bank transfer ref…">
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeModal()">Close</button>
+        <button type="submit" class="btn-primary"><i class="fa-solid fa-plus"></i> Record Voucher</button>
+      </div></form>`
+      :`<div class="modal-actions"><span style="margin-right:auto;font-size:13px;color:var(--success);font-weight:700"><i class="fa-solid fa-circle-check"></i> Fully paid</span><button type="button" class="btn-secondary" onclick="closeModal()">Close</button></div>`}`);
+}
+
+async function payPayment(e,id){
+  e.preventDefault();
+  const amount=Number(document.getElementById('pyAmt').value||0);
+  if(!await api('vouchers','POST',{paymentId:id,amount,date:document.getElementById('pyDate').value,
+    party:document.getElementById('pyParty').value.trim(),description:document.getElementById('pyNote').value.trim()}))return;
+  await loadState();render();payPaymentModal(id);toast('Voucher recorded against payment.');
+}
+
+async function deletePaymentVoucher(vid,pid){
+  if(!confirm('Delete this voucher? The payment balance will be restored.'))return;
+  if(!await api('vouchers/'+vid,'DELETE'))return;
+  await loadState();render();payPaymentModal(pid);toast('Voucher deleted.','warn');
 }
 
 /* ═══════════════════════════════════════════════════
@@ -979,7 +1098,7 @@ function renderMinePage(){
     <table class="list-table">
       <thead><tr><th>Date</th><th>No.</th><th>Head</th><th>Type</th><th>Amount</th><th></th></tr></thead>
       <tbody>${rows.map(v=>{
-        return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${headLabel(v)}</td><td>${v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>'} ${vStatusBadge(v)}</td><td><strong>${money(v.amount)}</strong></td><td><button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> View</button></td></tr>`;
+        return `<tr><td>${dateStr(v.date)}</td><td>${v.no}</td><td>${headLabel(v)}</td><td>${v.type==='Payment'?'<span class="badge badge-expense">Payment</span>':'<span class="badge badge-income">Receipt</span>'}</td><td><strong>${money(v.amount)}</strong></td><td><button class="link-btn" onclick="openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> View</button></td></tr>`;
       }).join('')||'<tr class="empty-row"><td colspan="6">No entries yet.</td></tr>'}
       ${rows.length?`<tr style="background:#f7f9fc"><td colspan="4" style="text-align:right;font-weight:700;padding:12px 14px">Total — In <span style="color:#1e8449">${money(inc)}</span> • Out <span style="color:#c0392b">${money(exp)}</span></td><td style="font-weight:800;padding:12px 14px;white-space:nowrap;color:${net<0?'#c0392b':'#1e8449'}">${money(net)}</td><td></td></tr>`:''}</tbody>
     </table>`);
@@ -997,12 +1116,9 @@ function voucherForm(id){
       <div id="vTypeShow" style="margin-top:8px;padding:9px 13px;border-radius:7px;font-size:13px;font-weight:600;display:none"></div>
       <div class="row-inline">
         <div><label>Date *</label><input type="date" id="vDate" value="${editing?.date||new Date().toISOString().slice(0,10)}" required></div>
-        <div><label>Total (PKR) *</label><input type="number" id="vTotal" min="1" value="${editing?.total||''}" placeholder="0" required oninput="vTotalSync()"></div>
-        ${editing
-          ?`<div><label>Paid — via payment entries</label><input disabled value="${money(editing.paid)} (${editing.status})"></div>`
-          :`<div><label>Paid (PKR)</label><input type="number" id="vPaid" min="0" placeholder="0" oninput="vPaidDirty=true;vStatusShow()"></div>`}
+        <div><label>Amount (PKR) *</label><input type="number" id="vAmount" min="1" value="${editing?.amount||''}" placeholder="0" required></div>
       </div>
-      <div id="vStatusShow" style="margin-top:10px"></div>
+      ${editing?.paymentId?'<p style="font-size:12.5px;color:#8896a6;margin-top:8px">Linked to a payment — head is set by that payment.</p>':''}
       <label id="vPartyLabel">Paid To / Received From</label>
       <input id="vParty" value="${editing?.party||''}" placeholder="Person or company name">
       <label>Description / Narration</label>
@@ -1018,34 +1134,22 @@ function voucherForm(id){
     </form>`);
   vTypeLabel();
   vSubSync(editing?.subHeadId||'');
-  vPaidDirty=!!id;
-  vStatusShow();
+  if(editing?.paymentId){document.getElementById('vHead').disabled=true;document.getElementById('vSubHead').disabled=true;}
 }
 
-let vPaidDirty=false;
-function vTotalSync(){
-  const t=document.getElementById('vTotal'),p=document.getElementById('vPaid');
-  if(p&&!vPaidDirty)p.value=t.value;
-  vStatusShow();
-}
-function vStatusShow(){
-  const el=document.getElementById('vStatusShow');if(!el)return;
-  const pEl=document.getElementById('vPaid');
-  const t=Number(document.getElementById('vTotal').value||0),p=pEl?Number(pEl.value||0):0;
-  if(!t||!pEl){el.innerHTML='';return;}
-  el.innerHTML=p<=0?'<span class="badge badge-warn"><i class="fa-regular fa-clock"></i> Will be saved as Pending — nothing paid</span>'
-    :p>=t?'<span class="badge badge-income"><i class="fa-solid fa-circle-check"></i> Will be saved as Paid in full</span>'
-    :`<span class="badge badge-neutral"><i class="fa-solid fa-circle-half-stroke"></i> Will be saved as Partial — balance ${money(t-p)}</span>`;
-}
-
-function vSubSync(pre=''){
-  const headId=document.getElementById('vHead').value;
+function syncSubHeads(headSelId,wrapId,selId,pre=''){
+  const headId=document.getElementById(headSelId).value;
   const subs=(db.subHeads||[]).filter(s=>s.headId===headId);
-  const wrap=document.getElementById('vSubWrap'),sel=document.getElementById('vSubHead');
+  const wrap=document.getElementById(wrapId),sel=document.getElementById(selId);
   wrap.style.display=subs.length?'block':'none';
   sel.required=!!subs.length;
   sel.innerHTML=subs.length?`<option value="">— Select sub-head —</option>`+subs.map(s=>`<option value="${s.id}" ${s.id===pre?'selected':''}>${s.name}</option>`).join(''):'';
 }
+function subHeadValue(wrapId,selId){
+  if(document.getElementById(wrapId).style.display==='none')return '';
+  return document.getElementById(selId).value||null;
+}
+function vSubSync(pre=''){syncSubHeads('vHead','vSubWrap','vSubHead',pre);}
 
 function vTypeLabel(){
   const sel=document.getElementById('vHead');
@@ -1062,14 +1166,11 @@ async function saveVoucher(e,id){
   e.preventDefault();
   const sel=document.getElementById('vHead');
   if(!sel.value){toast('Select an account head.','warn');return;}
-  const subWrap=document.getElementById('vSubWrap');
-  const subHeadId=subWrap&&subWrap.style.display!=='none'?document.getElementById('vSubHead').value:'';
-  if(subWrap&&subWrap.style.display!=='none'&&!subHeadId){toast('Select a sub-head.','warn');return;}
-  const total=Number(document.getElementById('vTotal').value||0);
-  const paidEl=document.getElementById('vPaid');
-  if(total<=0){toast('Total must be greater than zero.','warn');return;}
-  if(paidEl&&Number(paidEl.value||0)>total){toast('Paid amount cannot exceed the total.','warn');return;}
-  const data={headId:sel.value,subHeadId,date:document.getElementById('vDate').value,total,paid:paidEl?Number(paidEl.value||0):undefined,
+  const subHeadId=subHeadValue('vSubWrap','vSubHead');
+  if(subHeadId===null){toast('Select a sub-head.','warn');return;}
+  const amount=Number(document.getElementById('vAmount').value||0);
+  if(amount<=0){toast('Amount must be greater than zero.','warn');return;}
+  const data={headId:sel.value,subHeadId,date:document.getElementById('vDate').value,amount,
     party:document.getElementById('vParty').value.trim(),description:document.getElementById('vDesc').value.trim()};
   const file=document.getElementById('vAttach')?.files[0];
   if(file){
@@ -1097,73 +1198,15 @@ function viewVoucher(id){
       ${row('Head',`${h.name}${h.type?' ('+h.type+')':''}${sub?' → <strong>'+sub.name+'</strong>':''}`)}
       ${row(v.type==='Payment'?'Paid To':'Received From',v.party||'—')}
       ${row('Description',v.description||'—')}
-      ${row('Total',money(v.total))}
-      ${row('Paid',`<span style="font-size:20px;font-weight:800;color:var(--primary)">${money(v.paid)}</span>`)}
-      ${v.total>v.paid?row('Balance',`<span style="font-weight:700;color:#c0392b">${money(v.total-v.paid)}</span>`):''}
-      ${row('Status',vStatusBadge(v))}
+      ${row('Amount',`<span style="font-size:20px;font-weight:800;color:var(--primary)">${money(v.amount)}</span>`)}
+      ${v.paymentId?row('Payment',paymentLabel(v.paymentId)):''}
       ${row('Created By',v.createdBy||'—')}
       ${v.attachment?row('Attachment',`<a class="link-btn" href="${API_BASE}vouchers/${v.id}/attachment" target="_blank"><i class="fa-solid fa-paperclip"></i> ${v.attachment}</a>`):''}
     </table>
     <div class="modal-actions">
-      <button type="button" class="btn-secondary" onclick="closeModal();payVoucherModal('${v.id}')"><i class="fa-solid fa-coins"></i> Payments</button>
       <button type="button" class="btn-secondary" onclick="closeModal();voucherForm('${v.id}')"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
       <button type="button" class="btn-primary" onclick="closeModal();openVoucherPrint('${v.id}')"><i class="fa-solid fa-print"></i> Print / PDF</button>
     </div>`);
-}
-
-function voucherPays(id){
-  return (db.voucherPayments||[]).filter(p=>p.voucherId===id).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-}
-
-function payVoucherModal(id){
-  const v=db.vouchers.find(x=>x.id===id);if(!v)return;
-  const pays=voucherPays(id);
-  const bal=Math.max(0,v.total-v.paid);
-  const canDel=session.role==='admin';
-  const chip=(l,val,color)=>`<div style="flex:1;text-align:center;padding:10px;background:#f5f8fb;border-radius:8px;border:1px solid var(--border)">
-    <div style="font-size:10.5px;font-weight:700;color:#8896a6;text-transform:uppercase;letter-spacing:.6px">${l}</div>
-    <div style="font-size:17px;font-weight:800;color:${color};margin-top:3px">${val}</div></div>`;
-  showModal(`<div class="modal-header"><h3><i class="fa-solid fa-coins"></i> Payments — ${v.no}</h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
-    <p style="font-size:13px;color:#8896a6;margin-bottom:10px">${v.party||'—'} • ${headLabel(v)}</p>
-    <div style="display:flex;gap:8px;margin-bottom:16px">
-      ${chip('Total',money(v.total),'var(--primary)')}
-      ${chip('Paid',money(v.paid),'var(--success)')}
-      ${chip('Balance',money(bal),bal>0?'var(--danger)':'var(--success)')}
-    </div>
-    <label style="margin-top:0">Payment History</label>
-    ${pays.length?`<table class="doc-table" style="margin-top:4px">
-      <thead><tr><th>Date</th><th>Amount</th><th>Note</th><th>By</th><th></th></tr></thead>
-      <tbody>${pays.map(p=>`<tr><td style="white-space:nowrap">${dateStr(p.date)}</td><td style="font-weight:700;white-space:nowrap">${money(p.amount)}</td><td style="font-size:13px;color:#666">${p.note||'—'}</td><td style="font-size:12px;color:#8896a6">${p.createdBy||'—'}</td>
-        <td>${canDel?`<button class="link-btn danger" onclick="deleteVoucherPayment('${p.id}','${v.id}')" title="Delete payment"><i class="fa-solid fa-trash"></i></button>`:''}</td></tr>`).join('')}
-      </tbody></table>`
-      :'<p style="font-size:13px;color:#8896a6;padding:10px 0">No payments recorded yet.</p>'}
-    ${bal>0?`<form onsubmit="addVoucherPayment(event,'${v.id}')" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-      <div class="row-inline">
-        <div><label>Amount *</label><input type="number" id="vpAmt" min="1" max="${bal}" value="${bal}" required></div>
-        <div><label>Date</label><input type="date" id="vpDate" value="${new Date().toISOString().slice(0,10)}"></div>
-      </div>
-      <label>Note</label><input id="vpNote" placeholder="e.g. Cash installment, bank transfer ref…">
-      <div class="modal-actions">
-        <button type="button" class="btn-secondary" onclick="closeModal()">Close</button>
-        <button type="submit" class="btn-primary"><i class="fa-solid fa-plus"></i> Record Payment</button>
-      </div></form>`
-      :`<div class="modal-actions"><span style="margin-right:auto;font-size:13px;color:var(--success);font-weight:700"><i class="fa-solid fa-circle-check"></i> Paid in full</span><button type="button" class="btn-secondary" onclick="closeModal()">Close</button></div>`}`);
-}
-
-async function addVoucherPayment(e,id){
-  e.preventDefault();
-  const r=await api(`vouchers/${id}/payments`,'POST',{
-    amount:Number(document.getElementById('vpAmt').value||0),
-    date:document.getElementById('vpDate').value,
-    note:document.getElementById('vpNote').value.trim()});
-  if(!r)return;
-  await loadState();payVoucherModal(id);toast('Payment recorded.');
-}
-
-async function deleteVoucherPayment(pid,vid){
-  if(!confirm('Delete this payment entry? The voucher paid amount will be recalculated.'))return;
-  if(!await api(`vouchers/payments/${pid}`,'DELETE'))return;
-  await loadState();payVoucherModal(vid);toast('Payment deleted.','warn');
 }
 
 async function deleteVoucher(id){
@@ -1176,7 +1219,7 @@ async function deleteVoucher(id){
 async function bulkDeleteVouchers(){
   const ids=selectedVouchers().map(v=>v.id);
   if(!ids.length)return;
-  if(!confirm(`Delete ${ids.length} selected voucher${ids.length===1?'':'s'}? This also removes their payments and attachments and cannot be undone.`))return;
+  if(!confirm(`Delete ${ids.length} selected voucher${ids.length===1?'':'s'}? This also removes their attachments and cannot be undone.`))return;
   const res=await api('vouchers/bulk-delete','POST',{ids});
   if(!res)return;
   vSel.clear();await loadState();render();toast(`${res.deleted} voucher${res.deleted===1?'':'s'} deleted.`,'warn');
@@ -1221,10 +1264,7 @@ function voucherDocHtml(v){
       <tr><th style="width:35%">Account Head</th><td>${h.name}${h.type?' ('+h.type+')':''}${(()=>{const sub=(db.subHeads||[]).find(s=>s.id===v.subHeadId);return sub?` → <strong>${sub.name}</strong>`:'';})()}</td></tr>
       <tr><th>${v.type==='Payment'?'Paid To':'Received From'}</th><td>${v.party||'—'}</td></tr>
       <tr><th>Description</th><td>${v.description||'—'}</td></tr>
-      <tr><th>Total</th><td style="font-size:17px;font-weight:700">${money(v.total)}</td></tr>
-      <tr><th>Paid</th><td style="font-size:22px;font-weight:800;color:var(--primary)">${money(v.paid)}</td></tr>
-      ${v.total>v.paid?`<tr><th>Balance</th><td style="font-weight:700;color:#c0392b">${money(v.total-v.paid)}</td></tr>`:''}
-      <tr><th>Status</th><td>${vStatusBadge(v)}</td></tr>
+      <tr><th>Amount</th><td style="font-size:22px;font-weight:800;color:var(--primary)">${money(v.amount)}</td></tr>
     </table>
     ${v.attachment?(()=>{const isImg=/\.(jpe?g|png|gif|webp)$/i.test(v.attachment);const url=`${API_BASE}vouchers/${v.id}/attachment`;
       return isImg
@@ -1675,7 +1715,6 @@ function renderReportsPage(){
         <div id="repFromWrap" style="display:none"><label>From</label><input type="date" id="repFrom"></div>
         <div id="repToWrap" style="display:none"><label>To</label><input type="date" id="repTo"></div>
         <div><label>Type</label><select id="repType"><option>All</option><option value="Expense">Cash Out</option><option value="Income">Cash In</option></select></div>
-        <div><label>Status</label><select id="repStatus"><option>All</option><option value="pending">Pending</option><option value="partial">Partial</option><option value="paid">Paid</option></select></div>
         <div><label>Created By</label><select id="repBy"><option>All</option>${[...new Set(db.vouchers.map(v=>v.createdBy).filter(Boolean))].sort().map(c=>`<option>${c}</option>`).join('')}</select></div>
         <div style="flex:2;min-width:220px"><label>Heads</label>
           <div class="ms-wrap">
@@ -1744,15 +1783,12 @@ const REP_COLS=[
   {key:'party',label:'Party',val:v=>v.party||'',td:v=>`<td>${v.party||'—'}</td>`},
   {key:'desc',label:'Description',val:v=>v.description||'',td:v=>`<td style="font-size:11.5px;color:#666">${v.description||'—'}</td>`},
   {key:'type',label:'Type',val:v=>v.type,td:v=>`<td>${v.type}</td>`},
-  {key:'billed',label:'Billed',num:true,val:v=>v.total,sum:v=>v.total||0,td:v=>`<td style="text-align:right;white-space:nowrap;font-size:12.5px">${money(v.total)}</td>`},
   {key:'in',label:'Cash In',num:true,val:v=>v.type==='Receipt'?v.amount:0,sum:v=>v.type==='Receipt'?v.amount:0,td:v=>`<td style="text-align:right;font-weight:600;white-space:nowrap;font-size:12.5px;color:#1e8449">${v.type==='Receipt'?money(v.amount):''}</td>`},
   {key:'out',label:'Cash Out',num:true,val:v=>v.type==='Payment'?v.amount:0,sum:v=>v.type==='Payment'?v.amount:0,td:v=>`<td style="text-align:right;font-weight:600;white-space:nowrap;font-size:12.5px;color:#c0392b">${v.type==='Payment'?money(v.amount):''}</td>`},
-  {key:'due',label:'Due',num:true,val:v=>v.total-v.paid,sum:v=>v.total-v.paid,td:v=>`<td style="text-align:right;white-space:nowrap;font-size:12.5px;color:#b8860b">${v.total-v.paid>0?money(v.total-v.paid):''}</td>`},
-  {key:'status',label:'Status',val:v=>v.status,td:v=>`<td>${vStatusBadge(v)}</td>`},
   {key:'by',label:'Created By',val:v=>v.createdBy||'',td:v=>`<td>${v.createdBy||'—'}</td>`},
 ];
-let repColSel=new Set(REP_COLS.filter(c=>!['type','status','by'].includes(c.key)).map(c=>c.key));
-let vouchColSel=new Set(REP_COLS.filter(c=>!['type','billed','by'].includes(c.key)).map(c=>c.key));
+let repColSel=new Set(REP_COLS.filter(c=>!['type','by'].includes(c.key)).map(c=>c.key));
+let vouchColSel=new Set(REP_COLS.filter(c=>!['type','by'].includes(c.key)).map(c=>c.key));
 function vouchCols(){return REP_COLS.filter(c=>vouchColSel.has(c.key));}
 function vouchColToggle(){document.getElementById('vouchColPanel').classList.toggle('hidden');}
 function vouchColToggleAll(cb){document.querySelectorAll('.vouchColChk').forEach(c=>c.checked=cb.checked);vouchColSync();}
@@ -1828,15 +1864,13 @@ function generateReport(){
   const fromStr=from.toISOString().slice(0,10),toStr=to.toISOString().slice(0,10);
   const repType=document.getElementById('repType').value;
   const repBy=document.getElementById('repBy').value;
-  const repStatus=document.getElementById('repStatus').value;
   const repHeads=[...document.querySelectorAll('.repHeadChk:checked')].map(c=>c.value);
   const repSubs=new Set([...document.querySelectorAll('.repSubChk:checked')].map(c=>c.value));
   const subChkCount=document.querySelectorAll('.repSubChk').length;
-  let rows=vouchersInPeriod(fromStr,toStr,true);
+  let rows=db.vouchers.filter(v=>v.date>=fromStr&&v.date<=toStr);
   if(repType==='Expense')rows=rows.filter(v=>v.type==='Payment');
   if(repType==='Income')rows=rows.filter(v=>v.type==='Receipt');
   if(repBy!=='All')rows=rows.filter(v=>v.createdBy===repBy);
-  if(repStatus!=='All')rows=rows.filter(v=>v.status===repStatus);
   if(repHeads.length&&repHeads.length<db.heads.length)rows=rows.filter(v=>repHeads.includes(v.headId));
   if(repSubs.size<subChkCount)rows=rows.filter(v=>!v.subHeadId||repSubs.has(v.subHeadId));
   rows=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
@@ -1871,7 +1905,7 @@ function generateReport(){
       <div style="overflow-x:auto"><table class="doc-table compact">
         <thead><tr>${cols.map(c=>`<th${c.num?' style="text-align:right"':''}>${c.label}</th>`).join('')}</tr></thead>
         <tbody>${rows.map(v=>`<tr>${cols.map(c=>c.td(v)).join('')}</tr>`).join('')||`<tr class="empty-row"><td colspan="${cols.length}">No records found for selected filters.</td></tr>`}
-        ${rows.length?`<tr style="background:#f0f3f7">${cols.map((c,i)=>i===0?`<td style="font-weight:800;padding:9px 14px">TOTAL</td>`:c.num?`<td style="text-align:right;font-weight:800;padding:9px 14px;white-space:nowrap;font-size:12.5px;color:${c.key==='in'?'#1e8449':c.key==='out'?'#c0392b':c.key==='due'?'#b8860b':'inherit'}">${money(rows.reduce((s,v)=>s+c.sum(v),0))}</td>`:'<td></td>').join('')}</tr>
+        ${rows.length?`<tr style="background:#f0f3f7">${cols.map((c,i)=>i===0?`<td style="font-weight:800;padding:9px 14px">TOTAL</td>`:c.num?`<td style="text-align:right;font-weight:800;padding:9px 14px;white-space:nowrap;font-size:12.5px;color:${c.key==='in'?'#1e8449':c.key==='out'?'#c0392b':'inherit'}">${money(rows.reduce((s,v)=>s+c.sum(v),0))}</td>`:'<td></td>').join('')}</tr>
         <tr style="background:#f0f3f7"><td style="font-weight:800;padding:9px 14px">NET BALANCE</td><td colspan="${cols.length-1}" style="text-align:right;font-weight:800;padding:9px 14px;white-space:nowrap;font-size:12.5px;color:${inc-exp<0?'#c0392b':'#1e8449'}">${money(inc-exp)}</td></tr>`:''}</tbody>
       </table></div>
       <p style="text-align:center;font-size:11px;color:#bbb;margin-top:20px">Generated by ${db.settings.companyName} ERP • ${new Date().toLocaleString()}</p>
@@ -2011,7 +2045,7 @@ async function resetAllData(){
   const word=prompt('Type RESET to confirm:');
   if(word!=='RESET'){toast('Reset cancelled.','warn');return;}
   if(!await api('reset','POST'))return;
-  db={settings:defaultSettings(),employees:[],heads:[],vouchers:[],invoices:[],salary:[]};
+  db={settings:defaultSettings(),employees:[],heads:[],vouchers:[],payments:[],invoices:[],salary:[]};
   session=null;route='login';sessionStorage.removeItem('bb_route');render();toast('All data cleared.','warn');
 }
 
@@ -2103,12 +2137,12 @@ function listingPdf(title,subtitle,thead,bodyHtml,tfootHtml,filename,width){
 
 function exportVoucherPdf(){
   const rows=filteredVouchers();
-  const sub=`Type: ${vf.type} • Status: ${vfStatusLabel()} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.heads.length?` • Heads: ${esc(vfHeadsLabel())}`:''}${vf.by!=='All'?` • By: ${esc(vf.by)}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
+  const sub=`Type: ${vf.type} • Range: ${vf.from||'start'} → ${vf.to||'today'}${vf.heads.length?` • Heads: ${esc(vfHeadsLabel())}`:''}${vf.by!=='All'?` • By: ${esc(vf.by)}`:''}${vf.q?` • Search: "${esc(vf.q)}"`:''}`;
   const cols=vouchCols();
   const body=rows.map(v=>`<tr>${cols.map(c=>c.td(v)).join('')}</tr>`).join('');
-  const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
-  const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+(v.paid!==undefined?v.paid:v.amount),0);
-  const foot=`<tr>${cols.map((c,i)=>i===0?'<td style="text-align:right;font-weight:800">TOTAL</td>':c.num?`<td style="text-align:right;font-weight:800;white-space:nowrap;color:${c.key==='in'?'#1e8449':c.key==='out'?'#c0392b':c.key==='due'?'#b8860b':'inherit'}">${money(rows.reduce((s,v)=>s+c.sum(v),0))}</td>`:'<td></td>').join('')}</tr>
+  const inc=rows.filter(v=>v.type==='Receipt').reduce((s,v)=>s+v.amount,0);
+  const exp=rows.filter(v=>v.type==='Payment').reduce((s,v)=>s+v.amount,0);
+  const foot=`<tr>${cols.map((c,i)=>i===0?'<td style="text-align:right;font-weight:800">TOTAL</td>':c.num?`<td style="text-align:right;font-weight:800;white-space:nowrap;color:${c.key==='in'?'#1e8449':c.key==='out'?'#c0392b':'inherit'}">${money(rows.reduce((s,v)=>s+c.sum(v),0))}</td>`:'<td></td>').join('')}</tr>
     <tr><td style="text-align:right;font-weight:800">BALANCE</td><td colspan="${cols.length-1}" style="text-align:right;font-weight:800;white-space:nowrap;color:${inc-exp>=0?'#1e8449':'#c0392b'}">${money(inc-exp)}</td></tr>`;
   listingPdf('Voucher Register',sub,cols.map(c=>`<th${c.num?' style="text-align:right"':''}>${c.label}</th>`).join(''),body,foot,`vouchers-${vf.from||'all'}-to-${vf.to||'now'}`,Math.min(1100,820+Math.max(0,cols.length-8)*85));
 }
@@ -2183,7 +2217,7 @@ function render(){
   const fid=ae&&ae.id?ae.id:null;
   const pos=fid&&'selectionStart' in ae?ae.selectionStart:null;
   if(!session){app.innerHTML=renderLogin();return;}
-  const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,spending:renderSpendingPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage,projects:renderProjectsPage,attendance:renderAttendancePage,attreport:renderAttendanceReportPage,leaves:renderLeavesPage,announcements:renderAnnouncementsPage};
+  const pages={dashboard:renderDashboard,heads:renderHeadsPage,employees:renderEmployeesPage,vouchers:renderVouchersPage,payments:renderPaymentsPage,spending:renderSpendingPage,invoices:renderInvoicesPage,salary:renderSalaryPage,reports:renderReportsPage,settings:renderSettingsPage,add:renderAddPage,mine:renderMinePage,print:renderPrintPage,projects:renderProjectsPage,attendance:renderAttendancePage,attreport:renderAttendanceReportPage,leaves:renderLeavesPage,announcements:renderAnnouncementsPage};
   if(REMOTE_LOADERS[route])ensureRemote(route);
   app.innerHTML=(pages[route]||renderDashboard)();
   if(route==='dashboard')setTimeout(drawDashChart,0);
